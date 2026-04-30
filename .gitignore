@@ -1,2 +1,4 @@
-SPEC.md
 __pycache__/
+.claude/
+build/
+dist/

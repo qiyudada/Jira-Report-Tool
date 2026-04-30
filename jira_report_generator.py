@@ -16,6 +16,7 @@ import re
 import openpyxl
 from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
 from openpyxl.utils import get_column_letter
+from openpyxl.worksheet.datavalidation import DataValidation
 
 
 class JiraReportApp:
@@ -154,6 +155,15 @@ class JiraReportApp:
         # Quick filter info
         filter_info = tk.Label(filter_frame, text="💡 Includes both assigned issues and issues you commented on", font=("Segoe UI", 8), fg="#6B778C")
         filter_info.pack(fill=tk.X, pady=(0, 5))
+
+        # Column order row
+        column_order_frame = ttk.Frame(filter_frame)
+        column_order_frame.pack(fill=tk.X, pady=(0, 5))
+
+        ttk.Label(column_order_frame, text="Column Order:").grid(row=0, column=0, sticky=tk.W)
+        self.column_order_var = tk.StringVar(value="1,2,3,4,5,6,7")
+        ttk.Entry(column_order_frame, textvariable=self.column_order_var, width=25).grid(row=0, column=1, padx=5, sticky=tk.W)
+        ttk.Label(column_order_frame, text="(1=Customer, 2=Module, 3=Summary, 4=Jira#, 5=Status, 6=Priority, 7=Progress)").grid(row=0, column=2, sticky=tk.W)
 
         # === Output Section ===
         output_frame = ttk.LabelFrame(main_frame, text="Output", padding="10")
@@ -488,6 +498,13 @@ class JiraReportApp:
         header_alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
         cell_alignment = Alignment(horizontal="left", vertical="center", wrap_text=True)
 
+        # Parse column order (1-based to 0-based index)
+        # 1=Customer, 2=Module, 3=Summary, 4=Jira#, 5=Status, 6=Priority, 7=Progress
+        col_order = [int(x.strip()) - 1 for x in self.column_order_var.get().split(",")]
+
+        header_keys = ["customfield_11029", "customfield_12031", "summary", "key", "status", "priority", "progress"]
+        header_names = ["Customer 客户名称", "Module 模组型号", "Issue Description 问题描述", "Jira Number 单号", "Status 状态", "Priority 优先级", "Progress 进展"]
+
         def has_chinese(text):
             return any('一' <= c <= '鿿' for c in str(text))
 
@@ -497,84 +514,79 @@ class JiraReportApp:
             cell.value = text if text else value
             cell.font = font_chinese if has_chinese(text) else font_english
 
-        headers = ["Customer 客户名称", "Module 模组型号", "Issue Description 问题描述", "Jira Number 单号", "Status 状态", "Priority 优先级", "Progress 进展"]
-        for col, header in enumerate(headers, 1):
+        # Write headers in custom order
+        for col, idx in enumerate(col_order, 1):
+            header = header_names[idx]
             cell = ws.cell(row=1, column=col, value=header)
             cell.font = font_header
             cell.fill = header_fill
             cell.alignment = header_alignment
 
+        # Add dropdown validation for Status column (determined by column order)
+        status_col = col_order.index(4) + 1
+        status_range = f"{get_column_letter(status_col)}2:{get_column_letter(status_col)}{len(issues) + 1}"
+
+        # Create hidden sheet with status options for validation reference
+        ws_options = wb.create_sheet("_Options")
+        ws_options.sheet_state = "hidden"
+        for i, opt in enumerate(["WAIT FAE INFO", "WORKED AROUND", "WORKING", "CLOSED", "RESOLVED", "WAIT 3RD PARTY"], 1):
+            ws_options.cell(row=i, column=1, value=opt)
+        options_range = f"_Options!$A$1:$A$6"
+
+        dv = DataValidation(type="list", formula1=options_range, allow_blank=True)
+        dv.error = "Please select a valid status"
+        dv.errorTitle = "Invalid Status"
+        ws.add_data_validation(dv)
+        dv.sqref = status_range
+
         for row, issue in enumerate(issues, 2):
             fields = issue.get("fields", {})
+            values = [
+                fields.get("customfield_11029", ""),
+                fields.get("customfield_12031", ""),
+                fields.get("summary", ""),
+                issue.get("key", ""),
+                fields.get("status", {}),
+                fields.get("priority", {}),
+                "",
+            ]
 
-            # Column 1: Customer (customfield_11029)
-            customer = fields.get("customfield_11029", "")
-            if isinstance(customer, dict):
-                customer = customer.get("value", "")
-            cell = ws.cell(row=row, column=1, value=customer)
-            set_cell_font(cell, customer)
-            cell.alignment = cell_alignment
-
-            # Column 2: Module (customfield_12031 - cascadingselect, only child value)
-            module_field = fields.get("customfield_12031", "")
-            module = ""
-            if isinstance(module_field, dict):
-                child = module_field.get("child", {})
-                if isinstance(child, dict):
-                    module = child.get("value", "")
-                elif not module:
-                    module = module_field.get("value", "")
-            elif isinstance(module_field, list) and len(module_field) > 0:
-                parts = []
-                for item in module_field:
-                    if isinstance(item, dict):
-                        child = item.get("child", {})
+            for col, idx in enumerate(col_order, 1):
+                val = values[idx]
+                # Handle status and priority dicts
+                if idx == 4:  # Status
+                    val = val.get("name", "") if isinstance(val, dict) else val
+                elif idx == 5:  # Priority
+                    val = val.get("name", "") if isinstance(val, dict) else val
+                elif idx == 1:  # Module (customfield_12031)
+                    module_field = val
+                    module = ""
+                    if isinstance(module_field, dict):
+                        child = module_field.get("child", {})
                         if isinstance(child, dict):
-                            parts.append(child.get("value", ""))
-                        else:
-                            parts.append(item.get("value", str(item)))
-                    else:
-                        parts.append(str(item))
-                module = " - ".join(parts)
-            cell = ws.cell(row=row, column=2, value=module)
-            set_cell_font(cell, module)
-            cell.alignment = cell_alignment
+                            module = child.get("value", "")
+                        elif not module:
+                            module = module_field.get("value", "")
+                    elif isinstance(module_field, list) and len(module_field) > 0:
+                        parts = []
+                        for item in module_field:
+                            if isinstance(item, dict):
+                                child = item.get("child", {})
+                                if isinstance(child, dict):
+                                    parts.append(child.get("value", ""))
+                                else:
+                                    parts.append(item.get("value", str(item)))
+                            else:
+                                parts.append(str(item))
+                        module = " - ".join(parts)
+                    val = module
 
-            # Column 3: Issue Description (Summary)
-            summary = fields.get("summary", "")
-            cell = ws.cell(row=row, column=3, value=summary)
-            set_cell_font(cell, summary)
-            cell.alignment = cell_alignment
-
-            # Column 4: Jira Number (Key) with hyperlink
-            key = issue.get("key", "")
-            issue_url = f"{self.base_url}/browse/{key}"
-            cell = ws.cell(row=row, column=4, value=key)
-            set_cell_font(cell, key)
-            cell.alignment = cell_alignment
-            cell.hyperlink = issue_url
-
-            # Column 5: Status
-            status = fields.get("status", {})
-            status_name = status.get("name", "") if isinstance(status, dict) else status
-            cell = ws.cell(row=row, column=5, value=status_name)
-            set_cell_font(cell, status_name)
-            cell.alignment = cell_alignment
-
-            # Column 6: Priority
-            priority = fields.get("priority", {})
-            if isinstance(priority, dict):
-                priority_name = priority.get("name", "")
-            else:
-                priority_name = str(priority) if priority else ""
-            cell = ws.cell(row=row, column=6, value=priority_name)
-            set_cell_font(cell, priority_name)
-            cell.alignment = cell_alignment
-
-            # Column 7: Progress (empty for user to fill)
-            cell = ws.cell(row=row, column=7, value="")
-            cell.font = font_english
-            cell.alignment = cell_alignment
+                cell = ws.cell(row=row, column=col, value=val)
+                if idx == 3:  # Jira# column - add hyperlink
+                    key = issue.get("key", "")
+                    cell.hyperlink = f"{self.base_url}/browse/{key}"
+                set_cell_font(cell, val)
+                cell.alignment = cell_alignment
 
         # Auto-fit column widths
         for col in range(1, 8):
