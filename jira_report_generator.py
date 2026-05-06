@@ -64,15 +64,21 @@ class JiraReportApp:
             self.password_var.set(self.saved_password)
             self.remember_var.set(True)
 
+        self.ai_model_var.set(self.saved_ai_model)
+
     def load_credentials(self):
         self.saved_username = ""
         self.saved_password = ""
+        self.saved_deepseek_api_key = ""
+        self.saved_ai_model = "deepseek-chat"
         if os.path.exists(self.config_file):
             try:
                 with open(self.config_file, "r") as f:
                     data = json.load(f)
                     self.saved_username = data.get("username", "")
                     self.saved_password = data.get("password", "")
+                    self.saved_deepseek_api_key = data.get("deepseek_api_key", "")
+                    self.saved_ai_model = data.get("ai_model", "deepseek-chat")
                     self.last_save_dir = data.get("last_save_dir", os.path.expanduser("~"))
             except:
                 pass
@@ -83,6 +89,8 @@ class JiraReportApp:
                 json.dump({
                     "username": username,
                     "password": password,
+                    "deepseek_api_key": self.saved_deepseek_api_key,
+                    "ai_model": self.ai_model_var.get(),
                     "last_save_dir": self.last_save_dir
                 }, f)
         except:
@@ -144,7 +152,7 @@ class JiraReportApp:
         title_frame.pack(fill=tk.X)
         title_label = tk.Label(
             title_frame,
-            text="◆ JIRA WEEKLY REPORT ◆",
+            text="◆ JIRA REPORT TOOL ◆",
             font=("Consolas", 18, "bold"),
             fg=VSCODE_CYAN,
             bg=VSCODE_BG
@@ -154,7 +162,7 @@ class JiraReportApp:
         # Version tag
         version_label = tk.Label(
             title_frame,
-            text="[ v1.0 ]",
+            text="[ v1.1 ]",
             font=("Consolas", 8),
             fg=VSCODE_TEXT_DIM,
             bg=VSCODE_BG
@@ -307,9 +315,36 @@ class JiraReportApp:
                                  cursor="hand2")
         fetch_cb.pack(side=tk.LEFT)
 
+        # AI Summary toggle
+        self.use_ai_summary_var = tk.BooleanVar(value=False)
+        ai_summary_cb = tk.Checkbutton(fetch_comment_frame, text="[x] Use AI Summary",
+                                       variable=self.use_ai_summary_var,
+                                       bg=VSCODE_SURFACE_ALT, fg=VSCODE_YELLOW,
+                                       selectcolor=VSCODE_YELLOW, font=("Consolas", 9),
+                                       cursor="hand2", command=self.on_ai_summary_toggle)
+        ai_summary_cb.pack(side=tk.LEFT, padx=(20, 0))
+
+        # AI Config frame (shown when AI summary is enabled)
+        self.ai_config_frame = tk.Frame(filter_frame, bg=VSCODE_SURFACE_ALT)
+        self.ai_config_frame.grid(row=6, column=0, columnspan=8, sticky=tk.W, pady=(0, 5))
+
+        ttk.Label(self.ai_config_frame, text="Model:").grid(row=0, column=0, sticky=tk.W, padx=(0, 5))
+        self.ai_model_var = tk.StringVar(value="deepseek-chat")
+        ai_model_combo = ttk.Combobox(self.ai_config_frame, textvariable=self.ai_model_var,
+                                       width=18, state="readonly", style="Pixel.TCombobox")
+        ai_model_combo["values"] = ["deepseek-chat", "deepseek-coder", "deepseek-v4-flash", "deepseek-v4-pro"]
+        ai_model_combo.grid(row=0, column=1, padx=(0, 5), sticky=tk.W)
+
+        ai_note = tk.Label(self.ai_config_frame, text="(API Key in .jira_config)",
+                          font=("Consolas", 7), fg=VSCODE_TEXT_DIM, bg=VSCODE_SURFACE_ALT)
+        ai_note.grid(row=0, column=2, sticky=tk.W, padx=(5, 0))
+
+        # Initially hide AI config frame
+        self.ai_config_frame.grid_remove()
+
         # Alignment row
         align_frame = tk.Frame(filter_frame, bg=VSCODE_SURFACE_ALT)
-        align_frame.grid(row=6, column=0, columnspan=8, sticky=tk.W, pady=0)
+        align_frame.grid(row=7, column=0, columnspan=8, sticky=tk.W, pady=0)
 
         ttk.Label(align_frame, text="Header Align:").grid(row=0, column=0, sticky=tk.W)
         self.header_align_var = tk.StringVar(value="left")
@@ -364,6 +399,43 @@ class JiraReportApp:
         )
         self.generate_btn.pack()
 
+        # === Processing Indicator ===
+        self.processing_frame = tk.Frame(main_frame, bg=VSCODE_SURFACE, pady=5)
+        self.processing_frame.pack_forget()
+
+        self.spinner_label = tk.Label(
+            self.processing_frame,
+            text="◐",
+            font=("Consolas", 24),
+            fg=VSCODE_CYAN,
+            bg=VSCODE_SURFACE
+        )
+        self.spinner_label.pack(side=tk.LEFT, padx=(10, 5))
+
+        self.processing_status = tk.Label(
+            self.processing_frame,
+            text="",
+            font=("Consolas", 10),
+            fg=VSCODE_YELLOW,
+            bg=VSCODE_SURFACE,
+            anchor=tk.W
+        )
+        self.processing_status.pack(side=tk.LEFT, fill=tk.X, expand=True)
+
+        self.processing_detail = tk.Label(
+            self.processing_frame,
+            text="",
+            font=("Consolas", 8),
+            fg=VSCODE_TEXT_DIM,
+            bg=VSCODE_SURFACE,
+            anchor=tk.W
+        )
+        self.processing_detail.pack(side=tk.LEFT, fill=tk.X, expand=True)
+
+        self.spinner_frames = ["◐", "◓", "◑", "◒"]
+        self.spinner_index = 0
+        self.spinner_running = False
+
         # === Status Bar ===
         self.status_bar = tk.Label(
             self.root,
@@ -416,6 +488,13 @@ class JiraReportApp:
             self.password_entry.config(show="")
         else:
             self.password_entry.config(show="*")
+
+    def on_ai_summary_toggle(self):
+        if self.use_ai_summary_var.get():
+            self.ai_config_frame.grid()
+            self.fetch_comment_var.set(False)
+        else:
+            self.ai_config_frame.grid_remove()
 
     def login(self):
         url = self.base_url
@@ -542,6 +621,35 @@ class JiraReportApp:
         self.status_bar.config(text=f"► {message}")
         self.root.update_idletasks()
 
+    def _spin_step(self):
+        """Update spinner animation frame"""
+        if self.spinner_running:
+            self.spinner_label.config(text=self.spinner_frames[self.spinner_index])
+            self.spinner_index = (self.spinner_index + 1) % len(self.spinner_frames)
+            self.root.after(100, self._spin_step)
+
+    def start_processing(self, status_text="Processing..."):
+        """Show processing animation"""
+        self.spinner_running = True
+        self.spinner_index = 0
+        self.processing_status.config(text=status_text)
+        self.processing_detail.config(text="")
+        self.processing_frame.pack(fill=tk.X, pady=(5, 0))
+        self._spin_step()
+        self.root.update_idletasks()
+
+    def update_processing(self, status_text, detail_text=""):
+        """Update processing status"""
+        self.processing_status.config(text=status_text)
+        self.processing_detail.config(text=detail_text)
+        self.root.update_idletasks()
+
+    def stop_processing(self):
+        """Hide processing animation"""
+        self.spinner_running = False
+        self.processing_frame.pack_forget()
+        self.root.update_idletasks()
+
     def generate_report(self):
         if not self.logged_in:
             messagebox.showerror("Error", "Please login first")
@@ -578,7 +686,7 @@ class JiraReportApp:
             os.makedirs(save_dir)
 
         self.generate_btn.config(state=tk.DISABLED)
-        self.update_status("Fetching issues...")
+        self.start_processing("Starting...")
 
         thread = threading.Thread(target=self._generate_report_work,
                                   args=(start_date, end_date, selected_status, engineer_field, filepath))
@@ -605,26 +713,26 @@ class JiraReportApp:
             if status_clause:
                 jql_assist_wait3rd += f' AND {status_clause}'
 
-            self.root.after(0, lambda: self.update_status("Searching assigned issues..."))
+            self.root.after(0, lambda: self.update_processing("Searching issues...", f"Searching assigned issues..."))
             issues_assigned_normal = self.fetch_issues(jql_normal)
             issues_assigned_wait3rd = self.fetch_issues(jql_wait3rd)
             issues_assigned = issues_assigned_normal + issues_assigned_wait3rd
-            self.root.after(0, lambda: self.update_status(f"Found {len(issues_assigned_normal)} normal + {len(issues_assigned_wait3rd)} WAIT_3RD assigned"))
+            self.root.after(0, lambda: self.update_processing(f"Found {len(issues_assigned)} assigned issues", f"{len(issues_assigned_normal)} normal + {len(issues_assigned_wait3rd)} WAIT_3RD"))
 
             issues_assist_normal = self.fetch_issues(jql_assist_normal)
             issues_assist_wait3rd = self.fetch_issues(jql_assist_wait3rd)
             issues_assist = issues_assist_normal + issues_assist_wait3rd
-            self.root.after(0, lambda: self.update_status(f"Found {len(issues_assist_normal)} normal + {len(issues_assist_wait3rd)} WAIT_3RD assist"))
+            self.root.after(0, lambda: self.update_processing(f"Found {len(issues_assist)} assist issues", f"{len(issues_assist_normal)} normal + {len(issues_assist_wait3rd)} WAIT_3RD"))
 
             closed_statuses = {"CLOSED", "RESOLVED"}
             no_comment_required_statuses = {"WAIT 3RD PARTY"}
-            self.root.after(0, lambda: self.update_status(f"Filtering {len(issues_assigned)} assigned issues..."))
+            self.root.after(0, lambda: self.update_processing("Filtering issues...", f"Checking {len(issues_assigned)} assigned issues"))
             issues_assigned_filtered = []
             for issue in issues_assigned:
                 status = issue.get("fields", {}).get("status", {}).get("name", "")
                 if status in closed_statuses:
                     if not self.user_commented_within_months(issue['key'], months=3):
-                        self.root.after(0, lambda k=issue['key'], s=status: self.update_status(f"Skipping {k} - {s} (no comment in 3 months)"))
+                        self.root.after(0, lambda k=issue['key'], s=status: self.update_processing("Filtering issues...", f"Skipping {k} - {s}"))
                         continue
                     issues_assigned_filtered.append(issue)
                 elif status in no_comment_required_statuses:
@@ -632,16 +740,16 @@ class JiraReportApp:
                 elif self.user_commented_in_date_range(issue['key'], start_date, end_date):
                     issues_assigned_filtered.append(issue)
                 else:
-                    self.root.after(0, lambda k=issue['key']: self.update_status(f"Skipping {k} - no comment in date range"))
+                    self.root.after(0, lambda k=issue['key']: self.update_processing("Filtering issues...", f"Skipping {k}"))
             issues_assigned = issues_assigned_filtered
 
-            self.root.after(0, lambda: self.update_status("Filtering assist issues..."))
+            self.root.after(0, lambda: self.update_processing("Filtering assist issues...", f"Checking {len(issues_assist)} assist issues"))
             issues_assist_filtered = []
             for issue in issues_assist:
                 status = issue.get("fields", {}).get("status", {}).get("name", "")
                 if status in closed_statuses:
                     if not self.user_commented_within_months(issue['key'], months=3):
-                        self.root.after(0, lambda k=issue['key'], s=status: self.update_status(f"Skipping {k} - {s} (no comment in 3 months)"))
+                        self.root.after(0, lambda k=issue['key'], s=status: self.update_processing("Filtering issues...", f"Skipping {k} - {s}"))
                         continue
                     issues_assist_filtered.append(issue)
                 elif status in no_comment_required_statuses:
@@ -649,7 +757,7 @@ class JiraReportApp:
                 elif self.user_commented_in_date_range(issue['key'], start_date, end_date):
                     issues_assist_filtered.append(issue)
                 else:
-                    self.root.after(0, lambda k=issue['key']: self.update_status(f"Skipping {k} - no comment in date range"))
+                    self.root.after(0, lambda k=issue['key']: self.update_processing("Filtering issues...", f"Skipping {k}"))
             issues_assist = issues_assist_filtered
 
             all_issues = {issue['key']: issue for issue in issues_assigned + issues_assist}
@@ -658,16 +766,18 @@ class JiraReportApp:
             status_order = {"CLOSED": 0, "RESOLVED": 1, "WORKING": 2, "WORKED AROUND": 3, "WAIT FAE INFO": 4, "WAIT 3RD PARTY": 5}
             issues.sort(key=lambda x: (status_order.get(x.get("fields", {}).get("status", {}).get("name", ""), 99), x.get("key", "")))
 
-            self.root.after(0, lambda: self.update_status(f"Found {len(issues)} total issues (assigned + assists)"))
-            self.root.after(0, lambda: self.update_status("Generating Excel file..."))
+            self.root.after(0, lambda: self.update_processing(f"Found {len(issues)} total issues", "Generating Excel..."))
+            self.root.after(0, lambda: self.update_processing("Generating Excel file...", "Please wait..."))
 
             self.create_excel(issues, filepath, selected_status, start_date, end_date)
 
+            self.root.after(0, lambda: self.stop_processing())
             self.root.after(0, lambda: self.update_status(f"Report saved: {filepath}"))
             self.root.after(0, lambda: self.generate_btn.config(state=tk.NORMAL))
             self.root.after(0, lambda: messagebox.showinfo("Success", f"Report generated successfully!\n\n{len(issues)} issues exported to:\n{filepath}"))
 
         except Exception as e:
+            self.root.after(0, lambda: self.stop_processing())
             self.root.after(0, lambda: self.generate_btn.config(state=tk.NORMAL))
             self.root.after(0, lambda: messagebox.showerror("Error", f"Failed:\n{str(e)}"))
             self.root.after(0, lambda: self.update_status("Failed"))
@@ -820,6 +930,179 @@ class JiraReportApp:
         except Exception:
             return None
 
+    def get_all_comments_in_range(self, issue_key, start_date, end_date):
+        """Get ALL comments (from any author) within the date range for an issue"""
+        try:
+            url = f"{self.base_url}/rest/api/2/issue/{issue_key}/comment"
+            response = self.session.get(url, timeout=30)
+
+            if response.status_code != 200:
+                return []
+
+            data = response.json()
+            comments = data.get("comments", [])
+
+            result = []
+            for comment in comments:
+                author = comment.get("author", {})
+                author_name = author.get("displayName", "Unknown")
+                created_str = comment.get("created", "")
+                if created_str:
+                    try:
+                        comment_date = datetime.datetime.strptime(created_str[:19], "%Y-%m-%dT%H:%M:%S").date()
+                    except ValueError:
+                        continue
+                    if start_date <= comment_date <= end_date:
+                        body = comment.get("body", "") or ""
+                        # Clean HTML tags
+                        text = re.sub(r'<[^>]+>', '', body)
+                        # Clean HTML entities
+                        text = text.replace('&nbsp;', ' ').replace('&amp;', '&').replace('&lt;', '<').replace('&gt;', '>').replace('&quot;', '"').replace('&#39;', "'")
+                        # Clean multiple spaces and newlines
+                        text = re.sub(r'\s+', ' ', text).strip()
+                        if text:
+                            result.append({
+                                "author": author_name,
+                                "date": comment_date,
+                                "body": text
+                            })
+
+            return result
+        except Exception:
+            return []
+
+    def _format_comments_for_ai(self, comments, max_chars=800):
+        """Format comments for AI processing, with better structure and length control"""
+        if not comments:
+            return ""
+
+        formatted = []
+        total_chars = 0
+
+        for c in comments:
+            date_str = c['date'].strftime("%m-%d") if hasattr(c['date'], 'strftime') else str(c['date'])
+            body = c['body']
+
+            # Truncate each comment if too long, but preserve complete thoughts
+            if len(body) > 300:
+                body = body[:300] + "..."
+
+            entry = f"[{c['author']} {date_str}]: {body}"
+            if total_chars + len(entry) > max_chars:
+                # Check if we can add at least one more full comment
+                remaining = max_chars - total_chars
+                if remaining > 100:
+                    formatted.append(entry[:remaining] + "...")
+                break
+
+            formatted.append(entry)
+            total_chars += len(entry) + 1
+
+        return "\n".join(formatted)
+
+    def summarize_progress_with_ai(self, issue_key, summary, comments, model):
+        """Use DeepSeek AI to summarize issue progress from comments"""
+        api_key = self.saved_deepseek_api_key.strip()
+        if not api_key:
+            return "[AI总结] 未配置DeepSeek API Key"
+
+        if not comments:
+            return "[AI总结] 日期范围内无评论"
+
+        # Use improved formatting method
+        comments_text = self._format_comments_for_ai(comments, max_chars=800)
+
+        prompt = f"""你是一个Jira issue进展总结助手。请根据以下信息，用一段简短的话总结该问题的进展（50字以内）：
+
+Issue Key: {issue_key}
+问题摘要: {summary}
+日期范围内的评论:
+{comments_text}
+
+请直接输出进展总结，不需要其他说明。"""
+
+        try:
+            headers = {
+                "Authorization": f"Bearer {api_key}",
+                "Content-Type": "application/json"
+            }
+            payload = {
+                "model": model,
+                "messages": [
+                    {"role": "user", "content": prompt}
+                ],
+                "max_tokens": 200,
+                "temperature": 0.3
+            }
+            response = requests.post(
+                "https://api.deepseek.com/chat/completions",
+                headers=headers,
+                json=payload,
+                timeout=60
+            )
+
+            # Try to parse JSON first
+            try:
+                result = response.json()
+            except ValueError:
+                # Response is not JSON, check status
+                if response.status_code == 200:
+                    # Empty or malformed response
+                    return self._fallback_summary(comments, "API返回格式错误")
+                return f"[AI总结] API错误: HTTP {response.status_code}"
+
+            # Check for API-level errors in response
+            if "error" in result:
+                error_msg = result["error"].get("message", "未知错误")
+                return f"[AI总结] API错误: {error_msg[:50]}"
+
+            if response.status_code == 200:
+                choices = result.get("choices")
+                if not choices:
+                    return self._fallback_summary(comments, "API返回空")
+
+                message = choices[0].get("message", {})
+                summary_text = message.get("content", "").strip()
+
+                if summary_text:
+                    return summary_text
+                else:
+                    return self._fallback_summary(comments, "总结内容为空")
+            elif response.status_code == 401:
+                return "[AI总结] DeepSeek API Key无效"
+            elif response.status_code == 429:
+                return "[AI总结] API请求超过限额"
+            elif response.status_code == 400:
+                return "[AI总结] 请求参数错误"
+            else:
+                return f"[AI总结] API错误: HTTP {response.status_code}"
+
+        except requests.exceptions.Timeout:
+            return self._fallback_summary(comments, "API超时")
+        except requests.exceptions.ConnectionError:
+            return self._fallback_summary(comments, "网络连接失败")
+        except Exception as e:
+            return f"[AI总结] 异常: {str(e)[:30]}"
+
+        return self._fallback_summary(comments, "未知错误")
+
+    def _fallback_summary(self, comments, reason=""):
+        """Fallback to show latest comment when AI fails"""
+        if not comments:
+            return "[进展] 无评论"
+
+        # Sort by date descending, get latest
+        sorted_comments = sorted(comments, key=lambda x: x['date'], reverse=True)
+        latest = sorted_comments[0]
+        body = latest['body']
+
+        # Truncate if too long
+        if len(body) > 100:
+            body = body[:100] + "..."
+
+        prefix = f"[{reason}] " if reason else ""
+        return f"{prefix}最新: {body}"
+
     def create_excel(self, issues, filepath, statuses, start_date, end_date):
         wb = openpyxl.Workbook()
         ws = wb.active
@@ -889,8 +1172,18 @@ class JiraReportApp:
             issue_key = issue.get("key", "")
 
             latest_comment = ""
-            if self.fetch_comment_var.get():
-                self.update_status(f"Fetching comment for {issue_key}...")
+            if self.use_ai_summary_var.get():
+                self.root.after(0, lambda k=issue_key: self.update_processing(f"AI summarizing {k}...", ""))
+                all_comments = self.get_all_comments_in_range(issue_key, start_date, end_date)
+                ai_summary = self.summarize_progress_with_ai(
+                    issue_key,
+                    fields.get("summary", ""),
+                    all_comments,
+                    self.ai_model_var.get()
+                )
+                latest_comment = ai_summary
+            elif self.fetch_comment_var.get():
+                self.root.after(0, lambda k=issue_key: self.update_processing(f"Fetching comment for {k}...", ""))
                 latest_comment = self.get_user_latest_comment(issue_key, start_date, end_date) or ""
 
             values = [
