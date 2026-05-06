@@ -14,6 +14,7 @@ from datetime import timedelta
 import calendar
 import os
 import re
+import threading
 import openpyxl
 from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
 from openpyxl.utils import get_column_letter
@@ -58,6 +59,11 @@ class JiraReportApp:
         self.load_credentials()
         self.setup_ui()
 
+        if self.saved_username:
+            self.username_var.set(self.saved_username)
+            self.password_var.set(self.saved_password)
+            self.remember_var.set(True)
+
     def load_credentials(self):
         self.saved_username = ""
         self.saved_password = ""
@@ -94,12 +100,12 @@ class JiraReportApp:
         style.configure("TLabelframe", background=VSCODE_SURFACE, foreground=VSCODE_CYAN,
                        bordercolor=VSCODE_BORDER, relief="solid")
         style.configure("TLabelframe.Label", background=VSCODE_SURFACE, foreground=VSCODE_CYAN,
-                       font=("Courier New", 10, "bold"))
+                       font=("Consolas", 10, "bold"))
 
         # Button - pixel style
         style.configure("Pixel.TButton", background=VSCODE_SURFACE_ALT, foreground=VSCODE_TEXT,
                        borderwidth=2, bordercolor=VSCODE_BORDER, relief="solid",
-                       font=("Courier New", 9))
+                       font=("Consolas", 9))
         style.map("Pixel.TButton",
                  background=[("active", VSCODE_BLUE), ("pressed", VSCODE_SELECT)],
                  foreground=[("active", VSCODE_TEXT)])
@@ -120,7 +126,7 @@ class JiraReportApp:
 
         # Checkbutton
         style.configure("Pixel.TCheckbutton", background=VSCODE_SURFACE,
-                       foreground=VSCODE_TEXT, font=("Courier New", 9))
+                       foreground=VSCODE_TEXT, font=("Consolas", 9))
         style.map("Pixel.TCheckbutton",
                  background=[("active", VSCODE_SURFACE)],
                  indicatorcolor=[("selected", VSCODE_BLUE), ("!selected", VSCODE_SURFACE_ALT)])
@@ -139,7 +145,7 @@ class JiraReportApp:
         title_label = tk.Label(
             title_frame,
             text="◆ JIRA WEEKLY REPORT ◆",
-            font=("Courier New", 18, "bold"),
+            font=("Consolas", 18, "bold"),
             fg=VSCODE_CYAN,
             bg=VSCODE_BG
         )
@@ -149,7 +155,7 @@ class JiraReportApp:
         version_label = tk.Label(
             title_frame,
             text="[ v1.0 ]",
-            font=("Courier New", 8),
+            font=("Consolas", 8),
             fg=VSCODE_TEXT_DIM,
             bg=VSCODE_BG
         )
@@ -166,7 +172,7 @@ class JiraReportApp:
 
         # Login title
         login_title = tk.Label(login_frame, text="▼ LOGIN",
-                              font=("Courier New", 10, "bold"),
+                              font=("Consolas", 10, "bold"),
                               fg=VSCODE_ORANGE, bg=VSCODE_SURFACE_ALT)
         login_title.grid(row=0, column=0, columnspan=8, sticky=tk.W, pady=(0, 5))
 
@@ -191,7 +197,7 @@ class JiraReportApp:
         show_pwd_btn = tk.Checkbutton(login_frame, text="◉", variable=self.show_password_var,
                                      command=self.toggle_password_visibility,
                                      bg=VSCODE_SURFACE_ALT, fg=VSCODE_TEXT,
-                                     selectcolor=VSCODE_BLUE, font=("Courier New", 10))
+                                     selectcolor=VSCODE_BLUE, font=("Consolas", 10))
         show_pwd_btn.grid(row=1, column=4, padx=2)
 
         self.remember_var = tk.BooleanVar(value=False)
@@ -208,7 +214,7 @@ class JiraReportApp:
         self.logout_btn.grid(row=1, column=7)
 
         self.login_status = tk.Label(login_frame, text="● Not logged in",
-                                    font=("Courier New", 8),
+                                    font=("Consolas", 8),
                                     fg=VSCODE_RED, bg=VSCODE_SURFACE_ALT)
         self.login_status.grid(row=2, column=0, columnspan=8, sticky=tk.W, pady=(5, 0))
 
@@ -219,7 +225,7 @@ class JiraReportApp:
 
         # Filter title
         filter_title = tk.Label(filter_frame, text="▼ FILTERS",
-                               font=("Courier New", 10, "bold"),
+                               font=("Consolas", 10, "bold"),
                                fg=VSCODE_ORANGE, bg=VSCODE_SURFACE_ALT)
         filter_title.grid(row=0, column=0, columnspan=8, sticky=tk.W, pady=(0, 8))
 
@@ -248,7 +254,7 @@ class JiraReportApp:
                            bg=VSCODE_SURFACE_ALT, fg=VSCODE_TEXT,
                            activebackground=VSCODE_BLUE, activeforeground=VSCODE_TEXT,
                            relief="solid", borderwidth=2, highlightbackground=VSCODE_BORDER, highlightthickness=2,
-                           font=("Courier New", 8), cursor="hand2", width=w)
+                           font=("Consolas", 8), cursor="hand2", width=w)
             btn.pack(side=tk.LEFT, padx=1)
 
         # Default dates
@@ -273,7 +279,7 @@ class JiraReportApp:
         # Quick filter info
         filter_info = tk.Label(filter_frame,
                               text="► Includes assigned issues + issues you commented on",
-                              font=("Courier New", 8),
+                              font=("Consolas", 8),
                               fg=VSCODE_TEXT_DIM, bg=VSCODE_SURFACE_ALT)
         filter_info.grid(row=3, column=0, columnspan=8, sticky=tk.W, pady=(0, 5))
 
@@ -287,19 +293,37 @@ class JiraReportApp:
                  style="Pixel.TEntry").grid(row=0, column=1, padx=5, sticky=tk.W)
         col_help = tk.Label(column_order_frame,
                            text="(1=Cust, 2=Mod, 3=Sum, 4=Jira#, 5=Sts, 6=Key, 7=Prog)",
-                           font=("Courier New", 7), fg=VSCODE_TEXT_DIM, bg=VSCODE_SURFACE_ALT)
+                           font=("Consolas", 7), fg=VSCODE_TEXT_DIM, bg=VSCODE_SURFACE_ALT)
         col_help.grid(row=0, column=2, sticky=tk.W)
 
         # Fetch comment toggle
         fetch_comment_frame = tk.Frame(filter_frame, bg=VSCODE_SURFACE_ALT)
-        fetch_comment_frame.grid(row=5, column=0, columnspan=8, sticky=tk.W, pady=0)
+        fetch_comment_frame.grid(row=5, column=0, columnspan=8, sticky=tk.W, pady=(0, 5))
         self.fetch_comment_var = tk.BooleanVar(value=False)
         fetch_cb = tk.Checkbutton(fetch_comment_frame, text="[ ] Fetch latest comment for Progress",
                                  variable=self.fetch_comment_var,
                                  bg=VSCODE_SURFACE_ALT, fg=VSCODE_TEXT,
-                                 selectcolor=VSCODE_CYAN, font=("Courier New", 9),
+                                 selectcolor=VSCODE_CYAN, font=("Consolas", 9),
                                  cursor="hand2")
         fetch_cb.pack(side=tk.LEFT)
+
+        # Alignment row
+        align_frame = tk.Frame(filter_frame, bg=VSCODE_SURFACE_ALT)
+        align_frame.grid(row=6, column=0, columnspan=8, sticky=tk.W, pady=0)
+
+        ttk.Label(align_frame, text="Header Align:").grid(row=0, column=0, sticky=tk.W)
+        self.header_align_var = tk.StringVar(value="left")
+        header_align_combo = ttk.Combobox(align_frame, textvariable=self.header_align_var,
+                                          width=10, state="readonly", style="Pixel.TCombobox")
+        header_align_combo["values"] = ["left", "center", "right"]
+        header_align_combo.grid(row=0, column=1, padx=(5, 15), sticky=tk.W)
+
+        ttk.Label(align_frame, text="Cell Align:").grid(row=0, column=2, sticky=tk.W)
+        self.cell_align_var = tk.StringVar(value="center")
+        cell_align_combo = ttk.Combobox(align_frame, textvariable=self.cell_align_var,
+                                        width=10, state="readonly", style="Pixel.TCombobox")
+        cell_align_combo["values"] = ["left", "center", "right"]
+        cell_align_combo.grid(row=0, column=3, padx=(5, 0), sticky=tk.W)
 
         # === Output Section ===
         output_frame = tk.Frame(main_frame, bg=VSCODE_SURFACE_ALT, padx=10, pady=10,
@@ -307,7 +331,7 @@ class JiraReportApp:
         output_frame.pack(fill=tk.X, pady=(0, 8))
 
         output_title = tk.Label(output_frame, text="▼ OUTPUT",
-                               font=("Courier New", 10, "bold"),
+                               font=("Consolas", 10, "bold"),
                                fg=VSCODE_ORANGE, bg=VSCODE_SURFACE_ALT)
         output_title.grid(row=0, column=0, columnspan=8, sticky=tk.W, pady=(0, 5))
 
@@ -336,7 +360,7 @@ class JiraReportApp:
             bg=VSCODE_BLUE, fg=VSCODE_TEXT,
             activebackground=VSCODE_SELECT, activeforeground=VSCODE_TEXT,
             relief="solid", borderwidth=3, highlightbackground=VSCODE_BORDER, highlightthickness=3,
-            font=("Courier New", 12, "bold"), cursor="hand2", padx=20, pady=5
+            font=("Consolas", 12, "bold"), cursor="hand2", padx=20, pady=5
         )
         self.generate_btn.pack()
 
@@ -348,7 +372,7 @@ class JiraReportApp:
             relief="solid",
             anchor=tk.W,
             padx=10,
-            font=("Courier New", 9),
+            font=("Consolas", 9),
             fg=VSCODE_TEXT_DIM,
             bg=VSCODE_BG,
             borderwidth=2,
@@ -553,110 +577,100 @@ class JiraReportApp:
         if save_dir and not os.path.exists(save_dir):
             os.makedirs(save_dir)
 
+        self.generate_btn.config(state=tk.DISABLED)
         self.update_status("Fetching issues...")
 
+        thread = threading.Thread(target=self._generate_report_work,
+                                  args=(start_date, end_date, selected_status, engineer_field, filepath))
+        thread.daemon = True
+        thread.start()
+
+    def _generate_report_work(self, start_date, end_date, selected_status, engineer_field, filepath):
         try:
-            # Normal issues: engineer = currentUser, updated within date range
+            status_clause = f'status = "{selected_status}" ' if selected_status != "ALL" else ""
+
             jql_normal = f'"{engineer_field}" IN (currentUser()) AND updated >= {start_date} AND updated <= "{end_date} 23:59"'
             if status_clause:
                 jql_normal += f' AND {status_clause}'
 
-            # WAIT 3RD PARTY issues: engineer = currentUser, status = WAIT 3RD PARTY (no date limit)
             jql_wait3rd = f'"{engineer_field}" IN (currentUser()) AND status = "WAIT 3RD PARTY"'
             if status_clause:
                 jql_wait3rd += f' AND {status_clause}'
 
-            # Assist: normal issues
             jql_assist_normal = f'comment ~ currentUser() AND "{engineer_field}" != currentUser() AND updated >= {start_date} AND updated <= "{end_date} 23:59"'
             if status_clause:
                 jql_assist_normal += f' AND {status_clause}'
 
-            # Assist: WAIT 3RD PARTY issues
             jql_assist_wait3rd = f'comment ~ currentUser() AND "{engineer_field}" != currentUser() AND status = "WAIT 3RD PARTY"'
             if status_clause:
                 jql_assist_wait3rd += f' AND {status_clause}'
 
-            self.update_status("Searching assigned issues...")
+            self.root.after(0, lambda: self.update_status("Searching assigned issues..."))
             issues_assigned_normal = self.fetch_issues(jql_normal)
             issues_assigned_wait3rd = self.fetch_issues(jql_wait3rd)
             issues_assigned = issues_assigned_normal + issues_assigned_wait3rd
-            self.update_status(f"Found {len(issues_assigned_normal)} normal + {len(issues_assigned_wait3rd)} WAIT_3RD assigned")
+            self.root.after(0, lambda: self.update_status(f"Found {len(issues_assigned_normal)} normal + {len(issues_assigned_wait3rd)} WAIT_3RD assigned"))
 
             issues_assist_normal = self.fetch_issues(jql_assist_normal)
             issues_assist_wait3rd = self.fetch_issues(jql_assist_wait3rd)
             issues_assist = issues_assist_normal + issues_assist_wait3rd
-            self.update_status(f"Found {len(issues_assist_normal)} normal + {len(issues_assist_wait3rd)} WAIT_3RD assist")
+            self.root.after(0, lambda: self.update_status(f"Found {len(issues_assist_normal)} normal + {len(issues_assist_wait3rd)} WAIT_3RD assist"))
 
-            # Filter: for closed issues, only skip if no comment in 3 months
-            # others require comment in date range
-            # WAIT 3RD PARTY requires no comment (waiting for external)
             closed_statuses = {"CLOSED", "RESOLVED"}
             no_comment_required_statuses = {"WAIT 3RD PARTY"}
-            self.update_status(f"Filtering {len(issues_assigned)} assigned issues...")
+            self.root.after(0, lambda: self.update_status(f"Filtering {len(issues_assigned)} assigned issues..."))
             issues_assigned_filtered = []
             for issue in issues_assigned:
                 status = issue.get("fields", {}).get("status", {}).get("name", "")
                 if status in closed_statuses:
-                    # Closed issues: skip only if user has NOT commented in 3 months
                     if not self.user_commented_within_months(issue['key'], months=3):
-                        self.update_status(f"Skipping {issue['key']} - {status} (no comment in 3 months)")
+                        self.root.after(0, lambda k=issue['key'], s=status: self.update_status(f"Skipping {k} - {s} (no comment in 3 months)"))
                         continue
                     issues_assigned_filtered.append(issue)
                 elif status in no_comment_required_statuses:
-                    # WAIT 3RD PARTY: include regardless of comments
                     issues_assigned_filtered.append(issue)
                 elif self.user_commented_in_date_range(issue['key'], start_date, end_date):
                     issues_assigned_filtered.append(issue)
                 else:
-                    self.update_status(f"Skipping {issue['key']} - no comment in date range")
+                    self.root.after(0, lambda k=issue['key']: self.update_status(f"Skipping {k} - no comment in date range"))
             issues_assigned = issues_assigned_filtered
 
-            self.update_status("Filtering assist issues...")
+            self.root.after(0, lambda: self.update_status("Filtering assist issues..."))
             issues_assist_filtered = []
             for issue in issues_assist:
                 status = issue.get("fields", {}).get("status", {}).get("name", "")
                 if status in closed_statuses:
-                    # Closed issues: skip only if user has NOT commented in 3 months
                     if not self.user_commented_within_months(issue['key'], months=3):
-                        self.update_status(f"Skipping {issue['key']} - {status} (no comment in 3 months)")
+                        self.root.after(0, lambda k=issue['key'], s=status: self.update_status(f"Skipping {k} - {s} (no comment in 3 months)"))
                         continue
                     issues_assist_filtered.append(issue)
                 elif status in no_comment_required_statuses:
-                    # WAIT 3RD PARTY: include regardless of comments
                     issues_assist_filtered.append(issue)
                 elif self.user_commented_in_date_range(issue['key'], start_date, end_date):
                     issues_assist_filtered.append(issue)
                 else:
-                    self.update_status(f"Skipping {issue['key']} - no comment in date range")
+                    self.root.after(0, lambda k=issue['key']: self.update_status(f"Skipping {k} - no comment in date range"))
             issues_assist = issues_assist_filtered
 
             all_issues = {issue['key']: issue for issue in issues_assigned + issues_assist}
             issues = list(all_issues.values())
 
-            # Sort issues by status: CLOSED -> RESOLVED -> WORKING -> others
-            status_order = {
-                "CLOSED": 0,
-                "RESOLVED": 1,
-                "WORKING": 2,
-                "WORKED AROUND": 3,
-                "WAIT FAE INFO": 4,
-                "WAIT 3RD PARTY": 5,
-            }
-            issues.sort(key=lambda x: (
-                status_order.get(x.get("fields", {}).get("status", {}).get("name", ""), 99),
-                x.get("key", "")
-            ))
+            status_order = {"CLOSED": 0, "RESOLVED": 1, "WORKING": 2, "WORKED AROUND": 3, "WAIT FAE INFO": 4, "WAIT 3RD PARTY": 5}
+            issues.sort(key=lambda x: (status_order.get(x.get("fields", {}).get("status", {}).get("name", ""), 99), x.get("key", "")))
 
-            self.update_status(f"Found {len(issues)} total issues (assigned + assists)")
+            self.root.after(0, lambda: self.update_status(f"Found {len(issues)} total issues (assigned + assists)"))
+            self.root.after(0, lambda: self.update_status("Generating Excel file..."))
 
-            self.update_status("Generating Excel file...")
             self.create_excel(issues, filepath, selected_status, start_date, end_date)
-            self.update_status(f"Report saved: {filepath}")
-            messagebox.showinfo("Success", f"Report generated successfully!\n\n{len(issues)} issues exported to:\n{filepath}")
+
+            self.root.after(0, lambda: self.update_status(f"Report saved: {filepath}"))
+            self.root.after(0, lambda: self.generate_btn.config(state=tk.NORMAL))
+            self.root.after(0, lambda: messagebox.showinfo("Success", f"Report generated successfully!\n\n{len(issues)} issues exported to:\n{filepath}"))
 
         except Exception as e:
-            messagebox.showerror("Error", f"Failed:\n{str(e)}")
-            self.update_status("Failed")
+            self.root.after(0, lambda: self.generate_btn.config(state=tk.NORMAL))
+            self.root.after(0, lambda: messagebox.showerror("Error", f"Failed:\n{str(e)}"))
+            self.root.after(0, lambda: self.update_status("Failed"))
 
     def fetch_issues(self, jql, start_at=0, max_results=100):
         all_issues = []
@@ -814,14 +828,20 @@ class JiraReportApp:
         font_chinese = Font(name="Microsoft YaHei", size=10)
         font_english = Font(name="JetBrains Mono", size=10)
         font_header = Font(name="Microsoft YaHei", bold=True, color="FF000000", size=10)
-        header_alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
-        cell_alignment = Alignment(horizontal="left", vertical="center", wrap_text=True)
+
+        header_align = self.header_align_var.get()
+        cell_align = self.cell_align_var.get()
+        header_alignment = Alignment(horizontal=header_align, vertical="center", wrap_text=True)
+        cell_alignment = Alignment(horizontal=cell_align, vertical="center", wrap_text=True)
+
+        thin = Side(border_style="thin", color="FF000000")
+        border = Border(left=thin, right=thin, top=thin, bottom=thin)
 
         col_order = [int(x.strip()) - 1 for x in self.column_order_var.get().split(",")]
 
-        header_names = ["客户名称 Customer", "模组型号 Module", "问题描述 Issue Description",
-                       "单号 Jira Number", "状态 Status", "是否为重点问题 Is Key Issue",
-                       "进展 Progress"]
+        header_names = ["客户名称", "型号", "问题描述",
+                       "JIRA号", "状态", "是否为重点问题",
+                       "进展"]
 
         def has_chinese(text):
             return any('一' <= c <= '鿿' for c in str(text))
@@ -836,6 +856,7 @@ class JiraReportApp:
             cell = ws.cell(row=1, column=col, value=header)
             cell.font = font_header
             cell.alignment = header_alignment
+            cell.border = border
 
         status_col = col_order.index(4) + 1
         key_issue_col = col_order.index(5) + 1
@@ -917,6 +938,7 @@ class JiraReportApp:
                     cell.hyperlink = f"{self.base_url}/browse/{issue_key}"
                 set_cell_font(cell, val)
                 cell.alignment = cell_alignment
+                cell.border = border
 
         for col in range(1, 8):
             max_length = 0
