@@ -161,19 +161,34 @@ class JiraReportApp:
             return " - ".join(parts)
         return str(value).strip()
 
-    def _resolve_customer_and_model(self, fields):
+    def _resolve_customer_and_model(self, issue_key, fields):
         """Resolve export values with fallback for R&D issues.
 
-        Customer: customfield_11029 -> Epic Link(customfield_10100)
-        Model:    customfield_12031 -> Platform(customfield_10400/10401)
+        Normal issue:
+          Customer: customfield_11029
+          Model:    customfield_12031
+        R&D issue (e.g. SW-*):
+          Customer: Epic Name(customfield_10102) -> Epic Link(customfield_10100)
+          Model:    Platform(customfield_10400/10401)
         """
+        issue_key = str(issue_key or "")
+        is_rd_issue = issue_key.upper().startswith("SW-")
+
         customer = self._field_to_text(fields.get("customfield_11029"))
         model = self._field_to_text(fields.get("customfield_12031"))
 
-        if not customer:
-            customer = self._field_to_text(fields.get("customfield_10100"))
-        if not model:
-            model = self._field_to_text(fields.get("customfield_10400")) or self._field_to_text(fields.get("customfield_10401"))
+        epic_name = self._field_to_text(fields.get("customfield_10102"))
+        epic_link = self._field_to_text(fields.get("customfield_10100"))
+        platform = self._field_to_text(fields.get("customfield_10400")) or self._field_to_text(fields.get("customfield_10401"))
+
+        if is_rd_issue:
+            customer = epic_name or epic_link or customer
+            model = platform or model
+        else:
+            if not customer:
+                customer = epic_name or epic_link
+            if not model:
+                model = platform
 
         return customer, model
 
@@ -1013,7 +1028,7 @@ class JiraReportApp:
             "jql": jql,
             "startAt": start_at,
             "maxResults": max_results,
-            "fields": "summary,status,priority,created,updated,creator,key,customfield_11029,customfield_12031,customfield_10100,customfield_10400,customfield_10401"
+            "fields": "summary,status,priority,created,updated,creator,key,customfield_11029,customfield_12031,customfield_10100,customfield_10102,customfield_10400,customfield_10401"
         }
 
         while True:
@@ -1864,7 +1879,7 @@ class JiraReportApp:
             self.check_cancelled()
             fields = issue.get("fields", {})
             issue_key = issue.get("key", "")
-            customer_name, model_name = self._resolve_customer_and_model(fields)
+            customer_name, model_name = self._resolve_customer_and_model(issue_key, fields)
 
             latest_comment = latest_comments.get(issue_key, "")
             if self.fetch_comment_var.get() and not latest_comment:
