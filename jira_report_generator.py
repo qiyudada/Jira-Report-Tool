@@ -576,7 +576,6 @@ class JiraReportApp:
             style="Pixel.Horizontal.TProgressbar"
         )
         self.progress_bar.pack(fill=tk.X, padx=10, pady=(0, 5))
-        self.progress_bar.pack_forget()
 
         self.spinner_frames = ["◐", "◓", "◑", "◒"]
         self.spinner_index = 0
@@ -811,7 +810,6 @@ class JiraReportApp:
         self.processing_detail.config(text="")
         self.progress_var.set(0)
         self.processing_frame.pack(fill=tk.X, pady=(5, 0))
-        self.progress_bar.pack(fill=tk.X, padx=10, pady=(0, 5))
         self._spin_step()
         self.root.update_idletasks()
 
@@ -827,7 +825,7 @@ class JiraReportApp:
         """Hide processing animation"""
         self.spinner_running = False
         self.processing_frame.pack_forget()
-        self.progress_bar.pack_forget()
+        self.progress_var.set(0)
         self.root.update_idletasks()
 
     def cancel_generation(self):
@@ -1046,6 +1044,46 @@ class JiraReportApp:
 
         return all_issues
 
+    def _parse_jira_datetime(self, created_str):
+        """Parse Jira timestamp like 2026-05-08T17:32:01.123+0800 into datetime."""
+        if not created_str:
+            return None
+        raw = str(created_str).strip()
+        if not raw:
+            return None
+
+        # Normalize timezone suffix +0800 -> +08:00 for fromisoformat
+        if re.search(r'[+-]\d{4}$', raw):
+            raw = raw[:-5] + raw[-5:-2] + ":" + raw[-2:]
+
+        try:
+            return datetime.datetime.fromisoformat(raw)
+        except ValueError:
+            pass
+
+        for fmt in ("%Y-%m-%dT%H:%M:%S.%f%z", "%Y-%m-%dT%H:%M:%S%z", "%Y-%m-%dT%H:%M:%S.%f", "%Y-%m-%dT%H:%M:%S"):
+            try:
+                return datetime.datetime.strptime(raw, fmt)
+            except ValueError:
+                continue
+        return None
+
+    def _clean_comment_for_display(self, body):
+        """Light cleanup for 'Fetch latest comment' to preserve user wording."""
+        if not body:
+            return ""
+
+        text = body
+        text = re.sub(r'<br\s*/?>', '\n', text, flags=re.IGNORECASE)
+        text = re.sub(r'</(?:p|li|div|tr)>', '\n', text, flags=re.IGNORECASE)
+        text = re.sub(r'<[^>]+>', '', text)
+        text = (text.replace('&nbsp;', ' ').replace('&amp;', '&')
+                    .replace('&lt;', '<').replace('&gt;', '>')
+                    .replace('&quot;', '"').replace('&#39;', "'"))
+        text = re.sub(r'[\r\n]+', ' ', text)
+        text = re.sub(r'\s+', ' ', text).strip()
+        return text
+
     def user_commented_in_date_range(self, issue_key, start_date, end_date):
         try:
             self.check_cancelled()
@@ -1075,7 +1113,10 @@ class JiraReportApp:
                 if is_current_user:
                     created_str = comment.get("created", "")
                     if created_str:
-                        comment_date = datetime.datetime.strptime(created_str[:19], "%Y-%m-%dT%H:%M:%S").date()
+                        comment_dt = self._parse_jira_datetime(created_str)
+                        if not comment_dt:
+                            continue
+                        comment_date = comment_dt.date()
                         if start_date <= comment_date <= end_date:
                             return True
 
@@ -1116,7 +1157,10 @@ class JiraReportApp:
                 if is_current_user:
                     created_str = comment.get("created", "")
                     if created_str:
-                        comment_date = datetime.datetime.strptime(created_str[:19], "%Y-%m-%dT%H:%M:%S").date()
+                        comment_dt = self._parse_jira_datetime(created_str)
+                        if not comment_dt:
+                            continue
+                        comment_date = comment_dt.date()
                         if comment_date >= since_date:
                             return True
 
@@ -1142,7 +1186,7 @@ class JiraReportApp:
             current_user_short = self.username.split("@")[0] if self.username else ""
 
             latest_comment = None
-            latest_date = None
+            latest_dt = None
 
             for comment in comments:
                 self.check_cancelled()
@@ -1158,12 +1202,15 @@ class JiraReportApp:
                 if is_current_user:
                     created_str = comment.get("created", "")
                     if created_str:
-                        comment_date = datetime.datetime.strptime(created_str[:19], "%Y-%m-%dT%H:%M:%S").date()
+                        comment_dt = self._parse_jira_datetime(created_str)
+                        if not comment_dt:
+                            continue
+                        comment_date = comment_dt.date()
                         if start_date <= comment_date <= end_date:
                             body = comment.get("body", "")
-                            text = self._clean_comment_body(body)
-                            if text and (latest_date is None or comment_date > latest_date):
-                                latest_date = comment_date
+                            text = self._clean_comment_for_display(body)
+                            if text and (latest_dt is None or comment_dt > latest_dt):
+                                latest_dt = comment_dt
                                 latest_comment = text
 
             return latest_comment
@@ -1203,10 +1250,10 @@ class JiraReportApp:
                 created_str = comment.get("created", "")
                 if not created_str:
                     continue
-                try:
-                    comment_date = datetime.datetime.strptime(created_str[:19], "%Y-%m-%dT%H:%M:%S").date()
-                except ValueError:
+                comment_dt = self._parse_jira_datetime(created_str)
+                if not comment_dt:
                     continue
+                comment_date = comment_dt.date()
                 if fetch_start <= comment_date <= end_date:
                     body = comment.get("body", "") or ""
                     # Full cleaning via shared method (HTML + noise patterns + whitespace)
