@@ -36,6 +36,7 @@ VSCODE_TEXT = "#d4d4d4"
 VSCODE_TEXT_DIM = "#808080"
 VSCODE_DISABLED = "#5a5a5a"
 VSCODE_SELECT = "#264f78"
+CHECKBOX_SELECT_BG = "#ffffff"
 
 
 class OperationCancelled(Exception):
@@ -74,7 +75,10 @@ class JiraReportApp:
         self.ai_model_var.set(self.saved_ai_model)
         self.column_order_var.set(self._normalize_column_order(self.saved_column_order))
         self.key_issue_highlight_var.set(self.saved_key_issue_highlight)
+        self.comment_timestamp_prefix_var.set(self.saved_comment_timestamp_prefix)
         self.on_key_issue_highlight_toggle()
+        self.on_comment_timestamp_toggle()
+        self.on_fetch_comment_toggle()
 
     def load_credentials(self):
         self.saved_username = ""
@@ -83,6 +87,7 @@ class JiraReportApp:
         self.saved_ai_model = "deepseek-chat"
         self.saved_column_order = "1,2,3,4,5,6,7"
         self.saved_key_issue_highlight = True
+        self.saved_comment_timestamp_prefix = False
         if os.path.exists(self.config_file):
             try:
                 with open(self.config_file, "r") as f:
@@ -93,6 +98,7 @@ class JiraReportApp:
                     self.saved_ai_model = data.get("ai_model", "deepseek-chat")
                     self.saved_column_order = self._normalize_column_order(data.get("column_order", "1,2,3,4,5,6,7"))
                     self.saved_key_issue_highlight = bool(data.get("key_issue_highlight", True))
+                    self.saved_comment_timestamp_prefix = bool(data.get("comment_timestamp_prefix", False))
                     self.last_save_dir = data.get("last_save_dir", os.path.expanduser("~"))
             except:
                 pass
@@ -107,6 +113,7 @@ class JiraReportApp:
                     "ai_model": self.ai_model_var.get(),
                     "column_order": self._normalize_column_order(self.column_order_var.get()),
                     "key_issue_highlight": bool(self.key_issue_highlight_var.get()),
+                    "comment_timestamp_prefix": bool(self.comment_timestamp_prefix_var.get()),
                     "last_save_dir": self.last_save_dir
                 }, f)
         except:
@@ -122,6 +129,7 @@ class JiraReportApp:
             data["ai_model"] = self.ai_model_var.get()
             data["column_order"] = self._normalize_column_order(self.column_order_var.get())
             data["key_issue_highlight"] = bool(self.key_issue_highlight_var.get())
+            data["comment_timestamp_prefix"] = bool(self.comment_timestamp_prefix_var.get())
             data["last_save_dir"] = self.last_save_dir
             with open(self.config_file, "w") as f:
                 json.dump(data, f)
@@ -161,6 +169,27 @@ class JiraReportApp:
             return " - ".join(parts)
         return str(value).strip()
 
+    def _is_jira_issue_key_text(self, text):
+        return bool(re.fullmatch(r'[A-Z][A-Z0-9]+-\d+', str(text or "").strip(), flags=re.IGNORECASE))
+
+    def _extract_epic_display_name(self, fields):
+        """Extract readable epic title; do not fallback to raw issue key."""
+        epic_name = self._field_to_text(fields.get("customfield_10102"))
+        if epic_name and not self._is_jira_issue_key_text(epic_name):
+            return epic_name
+
+        epic_link = fields.get("customfield_10100")
+        if isinstance(epic_link, dict):
+            for key in ("summary", "name", "value"):
+                text = str(epic_link.get(key, "") or "").strip()
+                if text and not self._is_jira_issue_key_text(text):
+                    return text
+
+        text = self._field_to_text(epic_link)
+        if text and not self._is_jira_issue_key_text(text):
+            return text
+        return ""
+
     def _resolve_customer_and_model(self, issue_key, fields):
         """Resolve export values with fallback for R&D issues.
 
@@ -172,21 +201,20 @@ class JiraReportApp:
           Model:    Platform(customfield_10400/10401)
         """
         issue_key = str(issue_key or "")
-        is_rd_issue = issue_key.upper().startswith("SW-")
+        is_rd_issue = issue_key.upper().startswith("SW")
 
         customer = self._field_to_text(fields.get("customfield_11029"))
         model = self._field_to_text(fields.get("customfield_12031"))
 
-        epic_name = self._field_to_text(fields.get("customfield_10102"))
-        epic_link = self._field_to_text(fields.get("customfield_10100"))
+        epic_name = self._extract_epic_display_name(fields)
         platform = self._field_to_text(fields.get("customfield_10400")) or self._field_to_text(fields.get("customfield_10401"))
 
         if is_rd_issue:
-            customer = epic_name or epic_link or customer
+            customer = epic_name or customer
             model = platform or model
         else:
             if not customer:
-                customer = epic_name or epic_link
+                customer = epic_name
             if not model:
                 model = platform
 
@@ -307,12 +335,16 @@ class JiraReportApp:
         show_pwd_btn = tk.Checkbutton(login_frame, text="◉", variable=self.show_password_var,
                                      command=self.toggle_password_visibility,
                                      bg=VSCODE_SURFACE_ALT, fg=VSCODE_TEXT,
-                                     selectcolor=VSCODE_BLUE, font=("Consolas", 10))
+                                     selectcolor=CHECKBOX_SELECT_BG, font=("Consolas", 10))
         show_pwd_btn.grid(row=1, column=4, padx=2)
 
         self.remember_var = tk.BooleanVar(value=False)
-        remember_btn = ttk.Checkbutton(login_frame, text="Remember", variable=self.remember_var,
-                                      style="Pixel.TCheckbutton")
+        remember_btn = tk.Checkbutton(
+            login_frame, text="Remember", variable=self.remember_var,
+            bg=VSCODE_SURFACE_ALT, fg=VSCODE_TEXT,
+            selectcolor=CHECKBOX_SELECT_BG, activebackground=VSCODE_SURFACE_ALT,
+            activeforeground=VSCODE_TEXT, font=("Consolas", 9)
+        )
         remember_btn.grid(row=1, column=5, padx=5)
 
         self.login_btn = ttk.Button(login_frame, text="Login", command=self.login,
@@ -406,35 +438,61 @@ class JiraReportApp:
                            font=("Consolas", 7), fg=VSCODE_TEXT_DIM, bg=VSCODE_SURFACE_ALT)
         col_help.grid(row=0, column=2, sticky=tk.W)
 
-        # Fetch comment toggle
-        fetch_comment_frame = tk.Frame(filter_frame, bg=VSCODE_SURFACE_ALT)
-        fetch_comment_frame.grid(row=5, column=0, columnspan=8, sticky=tk.W, pady=(0, 5))
+        # Progress source group
+        progress_source_frame = tk.Frame(
+            filter_frame, bg=VSCODE_SURFACE, padx=8, pady=6,
+            relief="solid", borderwidth=1, highlightbackground=VSCODE_BORDER, highlightthickness=1
+        )
+        progress_source_frame.grid(row=5, column=0, columnspan=8, sticky=tk.EW, pady=(0, 6))
+
+        progress_source_title = tk.Label(
+            progress_source_frame, text="Progress Source",
+            font=("Consolas", 9, "bold"), fg=VSCODE_CYAN, bg=VSCODE_SURFACE
+        )
+        progress_source_title.pack(anchor=tk.W, pady=(0, 4))
+
+        source_mode_row = tk.Frame(progress_source_frame, bg=VSCODE_SURFACE)
+        source_mode_row.pack(fill=tk.X)
+
         self.fetch_comment_var = tk.BooleanVar(value=False)
-        self.fetch_comment_cb = tk.Checkbutton(fetch_comment_frame, text="[ ] Fetch latest comment for Progress",
-                                 variable=self.fetch_comment_var,
-                                 bg=VSCODE_SURFACE_ALT, fg=VSCODE_TEXT,
-                                 selectcolor=VSCODE_CYAN, font=("Consolas", 9),
-                                 cursor="hand2", command=self.on_fetch_comment_toggle)
+        self.fetch_comment_cb = tk.Checkbutton(
+            source_mode_row, text="Fetch latest comment for Progress",
+            variable=self.fetch_comment_var,
+            bg=VSCODE_SURFACE, fg=VSCODE_TEXT,
+            selectcolor=CHECKBOX_SELECT_BG, font=("Consolas", 9),
+            cursor="hand2", command=self.on_fetch_comment_toggle
+        )
         self.fetch_comment_cb.pack(side=tk.LEFT)
 
-        # AI Summary toggle
         self.use_ai_summary_var = tk.BooleanVar(value=False)
-        self.ai_summary_cb = tk.Checkbutton(fetch_comment_frame, text="[ ] Use AI Summary",
-                                       variable=self.use_ai_summary_var,
-                                       bg=VSCODE_SURFACE_ALT, fg=VSCODE_YELLOW,
-                                       selectcolor=VSCODE_YELLOW, font=("Consolas", 9),
-                                       cursor="hand2", command=self.on_ai_summary_toggle)
-        self.ai_summary_cb.pack(side=tk.LEFT, padx=(20, 0))
+        self.ai_summary_cb = tk.Checkbutton(
+            source_mode_row, text="Use AI Summary",
+            variable=self.use_ai_summary_var,
+            bg=VSCODE_SURFACE, fg=VSCODE_YELLOW,
+            selectcolor=CHECKBOX_SELECT_BG, font=("Consolas", 9),
+            cursor="hand2", command=self.on_ai_summary_toggle
+        )
+        self.ai_summary_cb.pack(side=tk.LEFT, padx=(16, 0))
 
-        # Mutual exclusion hint
-        hint_label = tk.Label(fetch_comment_frame, text="(mutually exclusive)",
-                              bg=VSCODE_SURFACE_ALT, fg=VSCODE_TEXT_DIM,
-                              font=("Consolas", 8))
-        hint_label.pack(side=tk.LEFT, padx=(5, 0))
+        hint_label = tk.Label(
+            source_mode_row, text="(mutually exclusive)",
+            bg=VSCODE_SURFACE, fg=VSCODE_TEXT_DIM, font=("Consolas", 8)
+        )
+        hint_label.pack(side=tk.LEFT, padx=(8, 0))
+
+        self.timestamp_row = tk.Frame(progress_source_frame, bg=VSCODE_SURFACE)
+        self.comment_timestamp_prefix_var = tk.BooleanVar(value=False)
+        self.comment_timestamp_cb = tk.Checkbutton(
+            self.timestamp_row, text="Prefix Time",
+            variable=self.comment_timestamp_prefix_var,
+            bg=VSCODE_SURFACE, fg=VSCODE_TEXT_DIM,
+            selectcolor=CHECKBOX_SELECT_BG, font=("Consolas", 9),
+            cursor="hand2", command=self.on_comment_timestamp_toggle
+        )
+        self.comment_timestamp_cb.pack(side=tk.LEFT)
 
         # AI Config frame (shown when AI summary is enabled)
-        self.ai_config_frame = tk.Frame(filter_frame, bg=VSCODE_SURFACE_ALT)
-        self.ai_config_frame.grid(row=6, column=0, columnspan=8, sticky=tk.W, pady=(0, 5))
+        self.ai_config_frame = tk.Frame(progress_source_frame, bg=VSCODE_SURFACE)
 
         ttk.Label(self.ai_config_frame, text="Model:").grid(row=0, column=0, sticky=tk.W, padx=(0, 5))
         self.ai_model_var = tk.StringVar(value="deepseek-chat")
@@ -444,34 +502,34 @@ class JiraReportApp:
         ai_model_combo.grid(row=0, column=1, padx=(0, 5), sticky=tk.W)
 
         ai_note = tk.Label(self.ai_config_frame, text="(API Key in .jira_config)",
-                          font=("Consolas", 7), fg=VSCODE_TEXT_DIM, bg=VSCODE_SURFACE_ALT)
+                          font=("Consolas", 7), fg=VSCODE_TEXT_DIM, bg=VSCODE_SURFACE)
         ai_note.grid(row=0, column=2, sticky=tk.W, padx=(5, 0))
 
         # Batch mode toggle
         self.batch_mode_var = tk.BooleanVar(value=False)
-        self.batch_cb = tk.Checkbutton(self.ai_config_frame, text="[ ] Batch Mode",
+        self.batch_cb = tk.Checkbutton(self.ai_config_frame, text="Batch Mode",
                                  variable=self.batch_mode_var,
-                                 bg=VSCODE_SURFACE_ALT, fg=VSCODE_CYAN,
-                                 selectcolor=VSCODE_CYAN, font=("Consolas", 9),
+                                 bg=VSCODE_SURFACE, fg=VSCODE_CYAN,
+                                 selectcolor=CHECKBOX_SELECT_BG, font=("Consolas", 9),
                                  cursor="hand2", command=self.on_batch_mode_toggle)
         self.batch_cb.grid(row=0, column=3, padx=(10, 0), sticky=tk.W)
 
         ttk.Label(self.ai_config_frame, text="Batch Size:").grid(row=0, column=4, sticky=tk.W, padx=(10, 2))
         self.batch_size_var = tk.IntVar(value=10)
         batch_size_entry = tk.Entry(self.ai_config_frame, textvariable=self.batch_size_var,
-                                    width=5, bg=VSCODE_SURFACE, fg=VSCODE_TEXT,
+                                    width=5, bg=VSCODE_SURFACE_ALT, fg=VSCODE_TEXT,
                                     insertbackground=VSCODE_TEXT, relief="solid",
                                     bd=1)
         batch_size_entry.grid(row=0, column=5, sticky=tk.W)
 
         # Initially hide AI config frame and set initial checkbox states
-        self.ai_config_frame.grid_remove()
+        self.ai_config_frame.pack_forget()
         self.on_batch_mode_toggle()  # Initialize batch mode text
-        self.ai_config_frame.grid_remove()
+        self.ai_config_frame.pack_forget()
 
         # Alignment row
         align_frame = tk.Frame(filter_frame, bg=VSCODE_SURFACE_ALT)
-        align_frame.grid(row=7, column=0, columnspan=8, sticky=tk.W, pady=0)
+        align_frame.grid(row=6, column=0, columnspan=8, sticky=tk.W, pady=0)
 
         ttk.Label(align_frame, text="Header Align:").grid(row=0, column=0, sticky=tk.W)
         self.header_align_var = tk.StringVar(value="left")
@@ -490,10 +548,10 @@ class JiraReportApp:
         self.key_issue_highlight_var = tk.BooleanVar(value=True)
         self.key_issue_highlight_cb = tk.Checkbutton(
             align_frame,
-            text="[x] Key Issue Red",
+            text="Key Issue Red",
             variable=self.key_issue_highlight_var,
             bg=VSCODE_SURFACE_ALT, fg=VSCODE_RED,
-            selectcolor=VSCODE_RED, font=("Consolas", 9),
+            selectcolor=CHECKBOX_SELECT_BG, font=("Consolas", 9),
             cursor="hand2", command=self.on_key_issue_highlight_toggle
         )
         self.key_issue_highlight_cb.grid(row=0, column=4, padx=(15, 0), sticky=tk.W)
@@ -652,36 +710,33 @@ class JiraReportApp:
 
     def on_ai_summary_toggle(self):
         if self.use_ai_summary_var.get():
-            self.ai_config_frame.grid()
+            self.ai_config_frame.pack(fill=tk.X, pady=(6, 0))
             self.fetch_comment_var.set(False)
             self.fetch_comment_cb.config(fg=VSCODE_DISABLED)
-            self.ai_summary_cb.config(text="[x] Use AI Summary")
+            self.on_fetch_comment_toggle()
         else:
-            self.ai_config_frame.grid_remove()
+            self.ai_config_frame.pack_forget()
             self.fetch_comment_cb.config(fg=VSCODE_TEXT)
-            self.ai_summary_cb.config(text="[ ] Use AI Summary")
 
     def on_fetch_comment_toggle(self):
         if self.fetch_comment_var.get():
             self.use_ai_summary_var.set(False)
-            self.ai_config_frame.grid_remove()
+            self.ai_config_frame.pack_forget()
             self.ai_summary_cb.config(fg=VSCODE_DISABLED)
-            self.fetch_comment_cb.config(text="[x] Fetch latest comment for Progress")
+            self.comment_timestamp_cb.config(fg=VSCODE_TEXT)
+            self.timestamp_row.pack(anchor=tk.W, pady=(4, 0))
         else:
             self.ai_summary_cb.config(fg=VSCODE_YELLOW)
-            self.fetch_comment_cb.config(text="[ ] Fetch latest comment for Progress")
+            self.comment_timestamp_cb.config(fg=VSCODE_TEXT_DIM)
+            self.timestamp_row.pack_forget()
 
     def on_batch_mode_toggle(self):
-        if self.batch_mode_var.get():
-            self.batch_cb.config(text="[x] Batch Mode")
-        else:
-            self.batch_cb.config(text="[ ] Batch Mode")
+        self.save_ui_preferences()
 
     def on_key_issue_highlight_toggle(self):
-        if self.key_issue_highlight_var.get():
-            self.key_issue_highlight_cb.config(text="[x] Key Issue Red")
-        else:
-            self.key_issue_highlight_cb.config(text="[ ] Key Issue Red")
+        self.save_ui_preferences()
+
+    def on_comment_timestamp_toggle(self):
         self.save_ui_preferences()
 
     def login(self):
@@ -1226,7 +1281,10 @@ class JiraReportApp:
                             text = self._clean_comment_for_display(body)
                             if text and (latest_dt is None or comment_dt > latest_dt):
                                 latest_dt = comment_dt
-                                latest_comment = text
+                                if self.comment_timestamp_prefix_var.get():
+                                    latest_comment = f"[{comment_dt.strftime('%m-%d %H:%M')}] {text}"
+                                else:
+                                    latest_comment = text
 
             return latest_comment
         except OperationCancelled:
