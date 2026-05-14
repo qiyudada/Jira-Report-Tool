@@ -21,22 +21,45 @@ from openpyxl.utils import get_column_letter
 from openpyxl.worksheet.datavalidation import DataValidation
 
 
-# VSCode Dark Theme Colors
-VSCODE_BG = "#1e1e1e"
-VSCODE_SURFACE = "#252526"
-VSCODE_SURFACE_ALT = "#2d2d2d"
-VSCODE_BORDER = "#3c3c3c"
-VSCODE_BLUE = "#007acc"
-VSCODE_CYAN = "#4ec9b0"
-VSCODE_ORANGE = "#ce9178"
-VSCODE_GREEN = "#6a9955"
-VSCODE_RED = "#f14c4c"
-VSCODE_YELLOW = "#dcdcaa"
-VSCODE_TEXT = "#d4d4d4"
-VSCODE_TEXT_DIM = "#808080"
-VSCODE_DISABLED = "#5a5a5a"
-VSCODE_SELECT = "#264f78"
+# Minecraft Pixel Art Theme Colors
+MINECRAFT_BG = "#1a1a1a"
+MINECRAFT_SURFACE = "#2d2d2d"
+MINECRAFT_SURFACE_ALT = "#3c3c3c"
+MINECRAFT_BORDER = "#1f1f1f"
+MINECRAFT_GRASS = "#5d8c3e"
+MINECRAFT_GRASS_DARK = "#4a7030"
+MINECRAFT_DIRT = "#8b6914"
+MINECRAFT_STONE = "#7a7a7a"
+MINECRAFT_WOOD = "#6b4423"
+MINECRAFT_COBBLE = "#555555"
+MINECRAFT_LAVA = "#ff4500"
+MINECRAFT_WATER = "#3f76e4"
+MINECRAFT_GOLD = "#ffd700"
+MINECRAFT_IRON = "#c0c0c0"
+MINECRAFT_TEXT = "#e8e8e8"
+MINECRAFT_TEXT_DIM = "#999999"
+MINECRAFT_GREEN = "#50fa7b"
+MINECRAFT_RED = "#ff5555"
+MINECRAFT_YELLOW = "#f1fa8c"
+MINECRAFT_AQUA = "#8be9fd"
+MINECRAFT_PURPLE = "#bd93f9"
 CHECKBOX_SELECT_BG = "#ffffff"
+
+# Keep VSCODE colors as aliases for backward compatibility
+VSCODE_BG = MINECRAFT_BG
+VSCODE_SURFACE = MINECRAFT_SURFACE
+VSCODE_SURFACE_ALT = MINECRAFT_SURFACE_ALT
+VSCODE_BORDER = MINECRAFT_BORDER
+VSCODE_BLUE = MINECRAFT_WATER
+VSCODE_CYAN = MINECRAFT_AQUA
+VSCODE_ORANGE = MINECRAFT_GOLD
+VSCODE_GREEN = MINECRAFT_GREEN
+VSCODE_RED = MINECRAFT_RED
+VSCODE_YELLOW = MINECRAFT_YELLOW
+VSCODE_TEXT = MINECRAFT_TEXT
+VSCODE_TEXT_DIM = MINECRAFT_TEXT_DIM
+VSCODE_DISABLED = "#555555"
+VSCODE_SELECT = MINECRAFT_WATER
 
 
 class OperationCancelled(Exception):
@@ -46,9 +69,9 @@ class OperationCancelled(Exception):
 class JiraReportApp:
     def __init__(self, root):
         self.root = root
-        self.root.title("Jira Report")
-        self.root.geometry("720x580")
-        self.root.minsize(620, 480)
+        self.root.title("Jira Report - Pixel Edition")
+        self.root.geometry("740x620")
+        self.root.minsize(680, 520)
         self.root.configure(bg=VSCODE_BG)
 
         # Jira API settings
@@ -221,183 +244,192 @@ class JiraReportApp:
         return customer, model
 
     def style_widgets(self):
-        """Apply VSCode Dark + Pixel style to ttk widgets"""
+        """Apply Minecraft Pixel Art style to ttk widgets"""
         style = ttk.Style()
         style.theme_use('clam')
 
         # Frame
-        style.configure("TFrame", background=VSCODE_SURFACE)
+        style.configure("TFrame", background=MINECRAFT_SURFACE)
 
         # Labelframe
-        style.configure("TLabelframe", background=VSCODE_SURFACE, foreground=VSCODE_CYAN,
-                       bordercolor=VSCODE_BORDER, relief="solid")
-        style.configure("TLabelframe.Label", background=VSCODE_SURFACE, foreground=VSCODE_CYAN,
-                       font=("Consolas", 10, "bold"))
+        style.configure("TLabelframe", background=MINECRAFT_SURFACE, foreground=MINECRAFT_AQUA,
+                       bordercolor=MINECRAFT_BORDER, relief="solid")
+        style.configure("TLabelframe.Label", background=MINECRAFT_SURFACE, foreground=MINECRAFT_AQUA,
+                       font=("Courier New", 10, "bold"))
 
         # Button - pixel style
-        style.configure("Pixel.TButton", background=VSCODE_SURFACE_ALT, foreground=VSCODE_TEXT,
-                       borderwidth=2, bordercolor=VSCODE_BORDER, relief="solid",
-                       font=("Consolas", 9))
+        style.configure("Pixel.TButton", background=MINECRAFT_COBBLE, foreground=MINECRAFT_TEXT,
+                       borderwidth=3, bordercolor=MINECRAFT_BORDER, relief="raised",
+                       font=("Courier New", 9))
         style.map("Pixel.TButton",
-                 background=[("active", VSCODE_BLUE), ("pressed", VSCODE_SELECT)],
-                 foreground=[("active", VSCODE_TEXT)])
+                 background=[("active", MINECRAFT_GRASS), ("pressed", MINECRAFT_STONE)],
+                 foreground=[("active", MINECRAFT_TEXT)])
 
         # Entry
-        style.configure("Pixel.TEntry", fieldbackground=VSCODE_SURFACE_ALT,
-                       foreground=VSCODE_TEXT, bordercolor=VSCODE_BORDER,
-                       borderwidth=2, relief="solid")
+        style.configure("Pixel.TEntry", fieldbackground=MINECRAFT_SURFACE_ALT,
+                       foreground=MINECRAFT_TEXT, bordercolor=MINECRAFT_BORDER,
+                       borderwidth=2, relief="raised")
 
         # Combobox
-        style.configure("Pixel.TCombobox", fieldbackground=VSCODE_SURFACE_ALT,
-                       foreground=VSCODE_TEXT, background=VSCODE_SURFACE_ALT,
-                       bordercolor=VSCODE_BORDER, borderwidth=2, relief="solid")
+        style.configure("Pixel.TCombobox", fieldbackground=MINECRAFT_SURFACE_ALT,
+                       foreground=MINECRAFT_TEXT, background=MINECRAFT_SURFACE_ALT,
+                       bordercolor=MINECRAFT_BORDER, borderwidth=2, relief="raised")
         style.map("Pixel.TCombobox",
-                 fieldbackground=[("readonly", VSCODE_SURFACE_ALT)],
-                 selectbackground=[("readonly", VSCODE_SELECT)],
-                 selectforeground=[("readonly", VSCODE_TEXT)])
+                 fieldbackground=[("readonly", MINECRAFT_SURFACE_ALT)],
+                 selectbackground=[("readonly", MINECRAFT_WATER)],
+                 selectforeground=[("readonly", MINECRAFT_TEXT)])
 
         # Checkbutton
-        style.configure("Pixel.TCheckbutton", background=VSCODE_SURFACE,
-                       foreground=VSCODE_TEXT, font=("Consolas", 9))
+        style.configure("Pixel.TCheckbutton", background=MINECRAFT_SURFACE,
+                       foreground=MINECRAFT_TEXT, font=("Courier New", 9))
         style.map("Pixel.TCheckbutton",
-                 background=[("active", VSCODE_SURFACE)],
-                 indicatorcolor=[("selected", VSCODE_BLUE), ("!selected", VSCODE_SURFACE_ALT)])
+                 background=[("active", MINECRAFT_SURFACE)],
+                 indicatorcolor=[("selected", MINECRAFT_GRASS), ("!selected", MINECRAFT_COBBLE)])
 
         # Scrollbar
-        style.configure("Vertical.TScrollbar", background=VSCODE_SURFACE_ALT,
-                       troughcolor=VSCODE_SURFACE, bordercolor=VSCODE_BORDER,
-                       arrowcolor=VSCODE_TEXT)
+        style.configure("Vertical.TScrollbar", background=MINECRAFT_COBBLE,
+                       troughcolor=MINECRAFT_SURFACE, bordercolor=MINECRAFT_BORDER,
+                       arrowcolor=MINECRAFT_TEXT)
 
         # Progressbar
         style.configure("Pixel.Horizontal.TProgressbar",
-                       troughcolor=VSCODE_SURFACE_ALT, background=VSCODE_CYAN,
-                       bordercolor=VSCODE_BORDER, lightcolor=VSCODE_CYAN,
-                       darkcolor=VSCODE_BLUE)
+                       troughcolor=MINECRAFT_COBBLE, background=MINECRAFT_GRASS,
+                       bordercolor=MINECRAFT_BORDER, lightcolor=MINECRAFT_GRASS,
+                       darkcolor=MINECRAFT_GRASS_DARK)
 
     def setup_ui(self):
         self.style_widgets()
 
-        # Title with pixel art style
-        title_frame = tk.Frame(self.root, bg=VSCODE_BG, pady=10)
+        # Title with Minecraft pixel art style
+        title_frame = tk.Frame(self.root, bg=MINECRAFT_BG, pady=8)
         title_frame.pack(fill=tk.X)
-        title_label = tk.Label(
-            title_frame,
-            text="◆ JIRA REPORT TOOL ◆",
-            font=("Consolas", 18, "bold"),
-            fg=VSCODE_CYAN,
-            bg=VSCODE_BG
-        )
-        title_label.pack()
 
-        # Version tag
+        # Minecraft-style banner frame
+        banner_frame = tk.Frame(title_frame, bg=MINECRAFT_STONE, padx=4, pady=2)
+        banner_frame.pack(pady=(0, 4))
+
+        title_label = tk.Label(
+            banner_frame,
+            text="⛏ JIRA REPORT TOOL ⛏",
+            font=("Courier New", 16, "bold"),
+            fg=MINECRAFT_YELLOW,
+            bg=MINECRAFT_STONE
+        )
+        title_label.pack(padx=10, pady=4)
+
         version_label = tk.Label(
             title_frame,
-            text="[ v1.1 ]",
-            font=("Consolas", 8),
-            fg=VSCODE_TEXT_DIM,
-            bg=VSCODE_BG
+            text="[ v1.2 - Pixel Edition ]",
+            font=("Courier New", 8),
+            fg=MINECRAFT_TEXT_DIM,
+            bg=MINECRAFT_BG
         )
         version_label.pack()
 
         # Main container
-        main_frame = tk.Frame(self.root, bg=VSCODE_SURFACE, padx=15, pady=10)
+        main_frame = tk.Frame(self.root, bg=MINECRAFT_SURFACE, padx=12, pady=8)
         main_frame.pack(fill=tk.BOTH, expand=True)
 
         # === Login Section ===
-        login_frame = tk.Frame(main_frame, bg=VSCODE_SURFACE_ALT, padx=10, pady=10,
-                               relief="solid", borderwidth=2, highlightbackground=VSCODE_BORDER, highlightthickness=2)
-        login_frame.pack(fill=tk.X, pady=(0, 8))
+        login_frame = tk.Frame(main_frame, bg=MINECRAFT_COBBLE, padx=8, pady=8,
+                               relief="solid", borderwidth=4)
+        login_frame.pack(fill=tk.X, pady=(0, 6))
 
-        # Login title
-        login_title = tk.Label(login_frame, text="▼ LOGIN",
-                              font=("Consolas", 10, "bold"),
-                              fg=VSCODE_ORANGE, bg=VSCODE_SURFACE_ALT)
-        login_title.grid(row=0, column=0, columnspan=8, sticky=tk.W, pady=(0, 5))
+        # Login title with pixel indicator
+        login_title = tk.Label(login_frame, text="⚿ LOGIN",
+                              font=("Courier New", 11, "bold"),
+                              fg=MINECRAFT_GOLD, bg=MINECRAFT_COBBLE)
+        login_title.grid(row=0, column=0, columnspan=10, sticky=tk.W, pady=(0, 6))
 
-        ttk.Label(login_frame, text="User:", style="Pixel.TLabel" if False else "").grid(
-            row=1, column=0, sticky=tk.W, padx=(0, 5))
+        # User row
         login_frame.columnconfigure(1, weight=0)
+        login_frame.columnconfigure(3, weight=0)
+        login_frame.columnconfigure(5, weight=0)
+        login_frame.columnconfigure(7, weight=1)
 
+        ttk.Label(login_frame, text="User:").grid(
+            row=1, column=0, sticky=tk.W, padx=(0, 4))
         self.username_var = tk.StringVar(value="")
-        username_entry = ttk.Entry(login_frame, textvariable=self.username_var, width=18,
+        username_entry = ttk.Entry(login_frame, textvariable=self.username_var, width=16,
                                   style="Pixel.TEntry")
-        username_entry.grid(row=1, column=1, padx=(0, 8))
+        username_entry.grid(row=1, column=1, padx=(0, 6))
 
-        ttk.Label(login_frame, text="Pwd:").grid(row=1, column=2, sticky=tk.W, padx=(0, 5))
+        ttk.Label(login_frame, text="Pwd:").grid(
+            row=1, column=2, sticky=tk.W, padx=(8, 4))
 
         self.password_var = tk.StringVar(value="")
         self.password_entry = ttk.Entry(login_frame, textvariable=self.password_var, show="*",
-                                       width=18, style="Pixel.TEntry")
-        self.password_entry.grid(row=1, column=3, padx=(0, 5))
+                                       width=16, style="Pixel.TEntry")
+        self.password_entry.grid(row=1, column=3, padx=(0, 6))
 
         # Show/hide password toggle
         self.show_password_var = tk.BooleanVar(value=False)
         show_pwd_btn = tk.Checkbutton(login_frame, text="◉", variable=self.show_password_var,
                                      command=self.toggle_password_visibility,
-                                     bg=VSCODE_SURFACE_ALT, fg=VSCODE_TEXT,
-                                     selectcolor=CHECKBOX_SELECT_BG, font=("Consolas", 10))
+                                     bg=MINECRAFT_COBBLE, fg=MINECRAFT_TEXT,
+                                     selectcolor=CHECKBOX_SELECT_BG, font=("Courier New", 10))
         show_pwd_btn.grid(row=1, column=4, padx=2)
 
         self.remember_var = tk.BooleanVar(value=False)
         remember_btn = tk.Checkbutton(
             login_frame, text="Remember", variable=self.remember_var,
-            bg=VSCODE_SURFACE_ALT, fg=VSCODE_TEXT,
-            selectcolor=CHECKBOX_SELECT_BG, activebackground=VSCODE_SURFACE_ALT,
-            activeforeground=VSCODE_TEXT, font=("Consolas", 9)
+            bg=MINECRAFT_COBBLE, fg=MINECRAFT_TEXT,
+            selectcolor=CHECKBOX_SELECT_BG, activebackground=MINECRAFT_COBBLE,
+            activeforeground=MINECRAFT_TEXT, font=("Courier New", 9)
         )
-        remember_btn.grid(row=1, column=5, padx=5)
+        remember_btn.grid(row=1, column=5, padx=4)
 
         self.login_btn = ttk.Button(login_frame, text="Login", command=self.login,
-                                    width=7, style="Pixel.TButton")
-        self.login_btn.grid(row=1, column=6, padx=(3, 3))
+                                    width=8, style="Pixel.TButton")
+        self.login_btn.grid(row=1, column=6, padx=(6, 3))
 
         self.logout_btn = ttk.Button(login_frame, text="Logout", command=self.logout,
-                                     state=tk.DISABLED, width=7, style="Pixel.TButton")
-        self.logout_btn.grid(row=1, column=7)
+                                     state=tk.DISABLED, width=8, style="Pixel.TButton")
+        self.logout_btn.grid(row=1, column=7, padx=(3, 0))
 
         self.login_status = tk.Label(login_frame, text="● Not logged in",
-                                    font=("Consolas", 8),
-                                    fg=VSCODE_RED, bg=VSCODE_SURFACE_ALT)
-        self.login_status.grid(row=2, column=0, columnspan=8, sticky=tk.W, pady=(5, 0))
+                                    font=("Courier New", 8),
+                                    fg=MINECRAFT_RED, bg=MINECRAFT_COBBLE)
+        self.login_status.grid(row=2, column=0, columnspan=10, sticky=tk.W, pady=(6, 0))
 
         # === Filter Section ===
-        filter_frame = tk.Frame(main_frame, bg=VSCODE_SURFACE_ALT, padx=10, pady=10,
-                               relief="solid", borderwidth=2, highlightbackground=VSCODE_BORDER, highlightthickness=2)
-        filter_frame.pack(fill=tk.X, pady=(0, 8))
+        filter_frame = tk.Frame(main_frame, bg=MINECRAFT_COBBLE, padx=8, pady=8,
+                               relief="solid", borderwidth=4)
+        filter_frame.pack(fill=tk.X, pady=(0, 6))
 
         # Filter title
-        filter_title = tk.Label(filter_frame, text="▼ FILTERS",
-                               font=("Consolas", 10, "bold"),
-                               fg=VSCODE_ORANGE, bg=VSCODE_SURFACE_ALT)
-        filter_title.grid(row=0, column=0, columnspan=8, sticky=tk.W, pady=(0, 8))
+        filter_title = tk.Label(filter_frame, text="⚿ FILTERS",
+                               font=("Courier New", 11, "bold"),
+                               fg=MINECRAFT_GOLD, bg=MINECRAFT_COBBLE)
+        filter_title.grid(row=0, column=0, columnspan=12, sticky=tk.W, pady=(0, 6))
 
         # Date row
-        date_inner = tk.Frame(filter_frame, bg=VSCODE_SURFACE_ALT)
-        date_inner.grid(row=1, column=0, columnspan=8, sticky=tk.W, pady=(0, 5))
+        date_inner = tk.Frame(filter_frame, bg=MINECRAFT_COBBLE)
+        date_inner.grid(row=1, column=0, columnspan=12, sticky=tk.W, pady=(0, 4))
 
         ttk.Label(date_inner, text="Start:").grid(row=0, column=0, sticky=tk.W)
         self.start_date_var = tk.StringVar()
         ttk.Entry(date_inner, textvariable=self.start_date_var, width=12,
-                 style="Pixel.TEntry").grid(row=0, column=1, padx=(5, 15))
+                 style="Pixel.TEntry").grid(row=0, column=1, padx=(4, 12))
 
         ttk.Label(date_inner, text="End:").grid(row=0, column=2, sticky=tk.W)
         self.end_date_var = tk.StringVar()
         ttk.Entry(date_inner, textvariable=self.end_date_var, width=12,
-                 style="Pixel.TEntry").grid(row=0, column=3, padx=(5, 15))
+                 style="Pixel.TEntry").grid(row=0, column=3, padx=(4, 12))
 
-        btn_frame = tk.Frame(date_inner, bg=VSCODE_SURFACE_ALT)
-        btn_frame.grid(row=0, column=4, padx=2)
+        btn_frame = tk.Frame(date_inner, bg=MINECRAFT_COBBLE)
+        btn_frame.grid(row=0, column=4, padx=0)
 
         # Pixel style buttons
-        for txt, cmd, w in [("This Week", lambda: self.set_quick_date("week"), 9),
-                            ("Last Week", lambda: self.set_quick_date("last_week"), 9),
-                            ("This Month", lambda: self.set_quick_date("month"), 10)]:
+        for txt, cmd, w in [("This Week", lambda: self.set_quick_date("week"), 10),
+                            ("Last Week", lambda: self.set_quick_date("last_week"), 10),
+                            ("This Month", lambda: self.set_quick_date("month"), 11)]:
             btn = tk.Button(btn_frame, text=txt, command=cmd,
-                           bg=VSCODE_SURFACE_ALT, fg=VSCODE_TEXT,
-                           activebackground=VSCODE_BLUE, activeforeground=VSCODE_TEXT,
-                           relief="solid", borderwidth=2, highlightbackground=VSCODE_BORDER, highlightthickness=2,
-                           font=("Consolas", 8), cursor="hand2", width=w)
-            btn.pack(side=tk.LEFT, padx=1)
+                           bg=MINECRAFT_GRASS, fg=MINECRAFT_TEXT,
+                           activebackground=MINECRAFT_GRASS_DARK, activeforeground=MINECRAFT_TEXT,
+                           relief="raised", borderwidth=3, font=("Courier New", 8, "bold"),
+                           cursor="hand2", width=w)
+            btn.pack(side=tk.LEFT, padx=2)
 
         # Default dates
         today = datetime.date.today()
@@ -406,8 +438,8 @@ class JiraReportApp:
         self.end_date_var.set(today.strftime("%Y-%m-%d"))
 
         # Status row
-        status_select_frame = tk.Frame(filter_frame, bg=VSCODE_SURFACE_ALT)
-        status_select_frame.grid(row=2, column=0, columnspan=8, sticky=tk.W, pady=(0, 5))
+        status_select_frame = tk.Frame(filter_frame, bg=MINECRAFT_COBBLE)
+        status_select_frame.grid(row=2, column=0, columnspan=12, sticky=tk.W, pady=(0, 4))
 
         ttk.Label(status_select_frame, text="Status:").grid(row=0, column=0, sticky=tk.W)
         self.status_filter_var = tk.StringVar(value="ALL")
@@ -415,51 +447,43 @@ class JiraReportApp:
                                     width=18, state="readonly", style="Pixel.TCombobox")
         status_combo["values"] = ["ALL", "WAIT FAE INFO", "WORKED AROUND", "WORKING",
                                    "CLOSED", "RESOLVED", "WAIT 3RD PARTY"]
-        status_combo.grid(row=0, column=1, padx=5, sticky=tk.W)
-        status_combo.bind("<<ComboboxSelected>>", lambda e: None)
-
-        # Quick filter info
-        filter_info = tk.Label(filter_frame,
-                              text="► Includes assigned issues + issues you commented on",
-                              font=("Consolas", 8),
-                              fg=VSCODE_TEXT_DIM, bg=VSCODE_SURFACE_ALT)
-        filter_info.grid(row=3, column=0, columnspan=8, sticky=tk.W, pady=(0, 5))
+        status_combo.grid(row=0, column=1, padx=(4, 0), sticky=tk.W)
 
         # Column order row
-        column_order_frame = tk.Frame(filter_frame, bg=VSCODE_SURFACE_ALT)
-        column_order_frame.grid(row=4, column=0, columnspan=8, sticky=tk.W, pady=(0, 5))
+        column_order_frame = tk.Frame(filter_frame, bg=MINECRAFT_COBBLE)
+        column_order_frame.grid(row=3, column=0, columnspan=12, sticky=tk.W, pady=(0, 4))
 
         ttk.Label(column_order_frame, text="Columns:").grid(row=0, column=0, sticky=tk.W)
         self.column_order_var = tk.StringVar(value="1,2,3,4,5,6,7")
         ttk.Entry(column_order_frame, textvariable=self.column_order_var, width=20,
-                 style="Pixel.TEntry").grid(row=0, column=1, padx=5, sticky=tk.W)
+                 style="Pixel.TEntry").grid(row=0, column=1, padx=(4, 8), sticky=tk.W)
         col_help = tk.Label(column_order_frame,
                            text="(1=Cust, 2=Mod, 3=Sum, 4=Jira#, 5=Sts, 6=Key, 7=Prog)",
-                           font=("Consolas", 7), fg=VSCODE_TEXT_DIM, bg=VSCODE_SURFACE_ALT)
+                           font=("Courier New", 7), fg=MINECRAFT_TEXT_DIM, bg=MINECRAFT_COBBLE)
         col_help.grid(row=0, column=2, sticky=tk.W)
 
         # Progress source group
         progress_source_frame = tk.Frame(
-            filter_frame, bg=VSCODE_SURFACE, padx=8, pady=6,
-            relief="solid", borderwidth=1, highlightbackground=VSCODE_BORDER, highlightthickness=1
+            filter_frame, bg=MINECRAFT_STONE, padx=10, pady=8,
+            relief="solid", borderwidth=3
         )
-        progress_source_frame.grid(row=5, column=0, columnspan=8, sticky=tk.EW, pady=(0, 6))
+        progress_source_frame.grid(row=4, column=0, columnspan=12, sticky=tk.EW, pady=(0, 4))
 
         progress_source_title = tk.Label(
-            progress_source_frame, text="Progress Source",
-            font=("Consolas", 9, "bold"), fg=VSCODE_CYAN, bg=VSCODE_SURFACE
+            progress_source_frame, text="❖ Progress Source",
+            font=("Courier New", 10, "bold"), fg=MINECRAFT_AQUA, bg=MINECRAFT_STONE
         )
-        progress_source_title.pack(anchor=tk.W, pady=(0, 4))
+        progress_source_title.pack(anchor=tk.W, pady=(0, 5))
 
-        source_mode_row = tk.Frame(progress_source_frame, bg=VSCODE_SURFACE)
+        source_mode_row = tk.Frame(progress_source_frame, bg=MINECRAFT_STONE)
         source_mode_row.pack(fill=tk.X)
 
         self.fetch_comment_var = tk.BooleanVar(value=False)
         self.fetch_comment_cb = tk.Checkbutton(
-            source_mode_row, text="Fetch latest comment for Progress",
+            source_mode_row, text="Fetch latest comment",
             variable=self.fetch_comment_var,
-            bg=VSCODE_SURFACE, fg=VSCODE_TEXT,
-            selectcolor=CHECKBOX_SELECT_BG, font=("Consolas", 9),
+            bg=MINECRAFT_STONE, fg=MINECRAFT_TEXT,
+            selectcolor=CHECKBOX_SELECT_BG, font=("Courier New", 9),
             cursor="hand2", command=self.on_fetch_comment_toggle
         )
         self.fetch_comment_cb.pack(side=tk.LEFT)
@@ -468,164 +492,159 @@ class JiraReportApp:
         self.ai_summary_cb = tk.Checkbutton(
             source_mode_row, text="Use AI Summary",
             variable=self.use_ai_summary_var,
-            bg=VSCODE_SURFACE, fg=VSCODE_YELLOW,
-            selectcolor=CHECKBOX_SELECT_BG, font=("Consolas", 9),
+            bg=MINECRAFT_STONE, fg=MINECRAFT_YELLOW,
+            selectcolor=CHECKBOX_SELECT_BG, font=("Courier New", 9),
             cursor="hand2", command=self.on_ai_summary_toggle
         )
-        self.ai_summary_cb.pack(side=tk.LEFT, padx=(16, 0))
+        self.ai_summary_cb.pack(side=tk.LEFT, padx=(20, 0))
 
-        hint_label = tk.Label(
-            source_mode_row, text="(mutually exclusive)",
-            bg=VSCODE_SURFACE, fg=VSCODE_TEXT_DIM, font=("Consolas", 8)
-        )
-        hint_label.pack(side=tk.LEFT, padx=(8, 0))
-
-        self.timestamp_row = tk.Frame(progress_source_frame, bg=VSCODE_SURFACE)
+        self.timestamp_row = tk.Frame(progress_source_frame, bg=MINECRAFT_STONE)
         self.comment_timestamp_prefix_var = tk.BooleanVar(value=False)
         self.comment_timestamp_cb = tk.Checkbutton(
             self.timestamp_row, text="Prefix Time",
             variable=self.comment_timestamp_prefix_var,
-            bg=VSCODE_SURFACE, fg=VSCODE_TEXT_DIM,
-            selectcolor=CHECKBOX_SELECT_BG, font=("Consolas", 9),
+            bg=MINECRAFT_STONE, fg=MINECRAFT_TEXT_DIM,
+            selectcolor=CHECKBOX_SELECT_BG, font=("Courier New", 9),
             cursor="hand2", command=self.on_comment_timestamp_toggle
         )
-        self.comment_timestamp_cb.pack(side=tk.LEFT)
+        self.comment_timestamp_cb.pack(anchor=tk.W, pady=(4, 0))
 
         # AI Config frame (shown when AI summary is enabled)
-        self.ai_config_frame = tk.Frame(progress_source_frame, bg=VSCODE_SURFACE)
+        self.ai_config_frame = tk.Frame(progress_source_frame, bg=MINECRAFT_STONE)
 
-        ttk.Label(self.ai_config_frame, text="Model:").grid(row=0, column=0, sticky=tk.W, padx=(0, 5))
+        ttk.Label(self.ai_config_frame, text="Model:").grid(
+            row=0, column=0, sticky=tk.W, padx=(0, 4))
         self.ai_model_var = tk.StringVar(value="deepseek-chat")
         ai_model_combo = ttk.Combobox(self.ai_config_frame, textvariable=self.ai_model_var,
                                        width=18, state="readonly", style="Pixel.TCombobox")
         ai_model_combo["values"] = ["deepseek-chat", "deepseek-coder", "deepseek-v4-flash", "deepseek-v4-pro"]
-        ai_model_combo.grid(row=0, column=1, padx=(0, 5), sticky=tk.W)
+        ai_model_combo.grid(row=0, column=1, padx=(0, 8), sticky=tk.W)
 
         ai_note = tk.Label(self.ai_config_frame, text="(API Key in .jira_config)",
-                          font=("Consolas", 7), fg=VSCODE_TEXT_DIM, bg=VSCODE_SURFACE)
-        ai_note.grid(row=0, column=2, sticky=tk.W, padx=(5, 0))
+                          font=("Courier New", 7), fg=MINECRAFT_TEXT_DIM, bg=MINECRAFT_STONE)
+        ai_note.grid(row=0, column=2, sticky=tk.W, padx=(4, 0))
 
         # Batch mode toggle
         self.batch_mode_var = tk.BooleanVar(value=False)
         self.batch_cb = tk.Checkbutton(self.ai_config_frame, text="Batch Mode",
                                  variable=self.batch_mode_var,
-                                 bg=VSCODE_SURFACE, fg=VSCODE_CYAN,
-                                 selectcolor=CHECKBOX_SELECT_BG, font=("Consolas", 9),
+                                 bg=MINECRAFT_STONE, fg=MINECRAFT_AQUA,
+                                 selectcolor=CHECKBOX_SELECT_BG, font=("Courier New", 9),
                                  cursor="hand2", command=self.on_batch_mode_toggle)
-        self.batch_cb.grid(row=0, column=3, padx=(10, 0), sticky=tk.W)
+        self.batch_cb.grid(row=0, column=3, padx=(12, 0), sticky=tk.W)
 
-        ttk.Label(self.ai_config_frame, text="Batch Size:").grid(row=0, column=4, sticky=tk.W, padx=(10, 2))
+        ttk.Label(self.ai_config_frame, text="Batch Size:").grid(
+            row=0, column=4, sticky=tk.W, padx=(12, 4))
         self.batch_size_var = tk.IntVar(value=10)
         batch_size_entry = tk.Entry(self.ai_config_frame, textvariable=self.batch_size_var,
-                                    width=5, bg=VSCODE_SURFACE_ALT, fg=VSCODE_TEXT,
-                                    insertbackground=VSCODE_TEXT, relief="solid",
-                                    bd=1)
+                                    width=5, bg=MINECRAFT_SURFACE_ALT, fg=MINECRAFT_TEXT,
+                                    insertbackground=MINECRAFT_TEXT, relief="solid",
+                                    bd=2, font=("Courier New", 9))
         batch_size_entry.grid(row=0, column=5, sticky=tk.W)
 
-        # Initially hide AI config frame and set initial checkbox states
+        # Initially hide AI config frame
         self.ai_config_frame.pack_forget()
-        self.on_batch_mode_toggle()  # Initialize batch mode text
-        self.ai_config_frame.pack_forget()
+        self.on_batch_mode_toggle()
 
         # Alignment row
-        align_frame = tk.Frame(filter_frame, bg=VSCODE_SURFACE_ALT)
-        align_frame.grid(row=6, column=0, columnspan=8, sticky=tk.W, pady=0)
+        align_frame = tk.Frame(filter_frame, bg=MINECRAFT_COBBLE)
+        align_frame.grid(row=5, column=0, columnspan=12, sticky=tk.W, pady=0)
 
-        ttk.Label(align_frame, text="Header Align:").grid(row=0, column=0, sticky=tk.W)
+        ttk.Label(align_frame, text="Header:").grid(row=0, column=0, sticky=tk.W)
         self.header_align_var = tk.StringVar(value="left")
         header_align_combo = ttk.Combobox(align_frame, textvariable=self.header_align_var,
-                                          width=10, state="readonly", style="Pixel.TCombobox")
+                                          width=9, state="readonly", style="Pixel.TCombobox")
         header_align_combo["values"] = ["left", "center", "right"]
-        header_align_combo.grid(row=0, column=1, padx=(5, 15), sticky=tk.W)
+        header_align_combo.grid(row=0, column=1, padx=(4, 12), sticky=tk.W)
 
-        ttk.Label(align_frame, text="Cell Align:").grid(row=0, column=2, sticky=tk.W)
+        ttk.Label(align_frame, text="Cell:").grid(row=0, column=2, sticky=tk.W)
         self.cell_align_var = tk.StringVar(value="center")
         cell_align_combo = ttk.Combobox(align_frame, textvariable=self.cell_align_var,
-                                        width=10, state="readonly", style="Pixel.TCombobox")
+                                        width=9, state="readonly", style="Pixel.TCombobox")
         cell_align_combo["values"] = ["left", "center", "right"]
-        cell_align_combo.grid(row=0, column=3, padx=(5, 0), sticky=tk.W)
+        cell_align_combo.grid(row=0, column=3, padx=(4, 12), sticky=tk.W)
 
         self.key_issue_highlight_var = tk.BooleanVar(value=True)
         self.key_issue_highlight_cb = tk.Checkbutton(
             align_frame,
             text="Key Issue Red",
             variable=self.key_issue_highlight_var,
-            bg=VSCODE_SURFACE_ALT, fg=VSCODE_RED,
-            selectcolor=CHECKBOX_SELECT_BG, font=("Consolas", 9),
+            bg=MINECRAFT_COBBLE, fg=MINECRAFT_RED,
+            selectcolor=CHECKBOX_SELECT_BG, font=("Courier New", 9),
             cursor="hand2", command=self.on_key_issue_highlight_toggle
         )
-        self.key_issue_highlight_cb.grid(row=0, column=4, padx=(15, 0), sticky=tk.W)
+        self.key_issue_highlight_cb.grid(row=0, column=4, padx=(12, 0), sticky=tk.W)
 
         # === Output Section ===
-        output_frame = tk.Frame(main_frame, bg=VSCODE_SURFACE_ALT, padx=10, pady=10,
-                               relief="solid", borderwidth=2, highlightbackground=VSCODE_BORDER, highlightthickness=2)
-        output_frame.pack(fill=tk.X, pady=(0, 8))
+        output_frame = tk.Frame(main_frame, bg=MINECRAFT_COBBLE, padx=8, pady=8,
+                               relief="solid", borderwidth=4)
+        output_frame.pack(fill=tk.X, pady=(0, 6))
 
-        output_title = tk.Label(output_frame, text="▼ OUTPUT",
-                               font=("Consolas", 10, "bold"),
-                               fg=VSCODE_ORANGE, bg=VSCODE_SURFACE_ALT)
-        output_title.grid(row=0, column=0, columnspan=8, sticky=tk.W, pady=(0, 5))
+        output_title = tk.Label(output_frame, text="⚿ OUTPUT",
+                               font=("Courier New", 11, "bold"),
+                               fg=MINECRAFT_GOLD, bg=MINECRAFT_COBBLE)
+        output_title.grid(row=0, column=0, columnspan=12, sticky=tk.W, pady=(0, 6))
 
-        output_inner = tk.Frame(output_frame, bg=VSCODE_SURFACE_ALT)
-        output_inner.grid(row=1, column=0, columnspan=8, sticky=tk.EW)
+        output_inner = tk.Frame(output_frame, bg=MINECRAFT_COBBLE)
+        output_inner.grid(row=1, column=0, columnspan=12, sticky=tk.EW)
         output_inner.columnconfigure(1, weight=1)
 
         ttk.Label(output_inner, text="Save:").grid(row=0, column=0, sticky=tk.W)
         self.filepath_var = tk.StringVar()
         self.filepath_var.set(os.path.join(self.last_save_dir,
                          f"Jira_Weekly_Report_{datetime.date.today().strftime('%Y%m%d')}.xlsx"))
-        ttk.Entry(output_inner, textvariable=self.filepath_var, width=45,
-                 style="Pixel.TEntry").grid(row=0, column=1, padx=5, sticky=tk.EW)
-        ttk.Button(output_inner, text="...", command=self.browse_file, width=4,
-                  style="Pixel.TButton").grid(row=0, column=2, padx=(0, 5))
+        ttk.Entry(output_inner, textvariable=self.filepath_var, width=40,
+                 style="Pixel.TEntry").grid(row=0, column=1, padx=(4, 8), sticky=tk.EW)
+        ttk.Button(output_inner, text="...", command=self.browse_file, width=5,
+                  style="Pixel.TButton").grid(row=0, column=2, padx=(0, 0))
 
         # === Generate Button ===
-        gen_frame = tk.Frame(main_frame, bg=VSCODE_SURFACE)
-        gen_frame.pack(pady=5)
+        gen_frame = tk.Frame(main_frame, bg=MINECRAFT_SURFACE)
+        gen_frame.pack(pady=6)
 
         self.generate_btn = tk.Button(
             gen_frame,
             text="▶ GENERATE REPORT",
             command=self.generate_report,
             state=tk.DISABLED,
-            bg=VSCODE_BLUE, fg=VSCODE_TEXT,
-            activebackground=VSCODE_SELECT, activeforeground=VSCODE_TEXT,
-            relief="solid", borderwidth=3, highlightbackground=VSCODE_BORDER, highlightthickness=3,
-            font=("Consolas", 12, "bold"), cursor="hand2", padx=20, pady=5
+            bg=MINECRAFT_GRASS, fg=MINECRAFT_TEXT,
+            activebackground=MINECRAFT_GRASS_DARK, activeforeground=MINECRAFT_TEXT,
+            relief="raised", borderwidth=4, font=("Courier New", 11, "bold"),
+            cursor="hand2", padx=16, pady=4
         )
-        self.generate_btn.pack(side=tk.LEFT, padx=(0, 8))
+        self.generate_btn.pack(side=tk.LEFT, padx=(0, 10))
 
         self.cancel_btn = tk.Button(
             gen_frame,
             text="■ CANCEL",
             command=self.cancel_generation,
             state=tk.DISABLED,
-            bg=VSCODE_RED, fg=VSCODE_TEXT,
-            activebackground=VSCODE_SELECT, activeforeground=VSCODE_TEXT,
-            relief="solid", borderwidth=3, highlightbackground=VSCODE_BORDER, highlightthickness=3,
-            font=("Consolas", 12, "bold"), cursor="hand2", padx=20, pady=5
+            bg=MINECRAFT_LAVA, fg=MINECRAFT_TEXT,
+            activebackground=MINECRAFT_RED, activeforeground=MINECRAFT_TEXT,
+            relief="raised", borderwidth=4, font=("Courier New", 11, "bold"),
+            cursor="hand2", padx=16, pady=4
         )
         self.cancel_btn.pack(side=tk.LEFT)
 
         # === Processing Indicator ===
-        self.processing_frame = tk.Frame(main_frame, bg=VSCODE_SURFACE, pady=5)
+        self.processing_frame = tk.Frame(main_frame, bg=MINECRAFT_SURFACE, pady=6)
         self.processing_frame.pack_forget()
 
         self.spinner_label = tk.Label(
             self.processing_frame,
             text="◐",
-            font=("Consolas", 24),
-            fg=VSCODE_CYAN,
-            bg=VSCODE_SURFACE
+            font=("Courier New", 22),
+            fg=MINECRAFT_GOLD,
+            bg=MINECRAFT_SURFACE
         )
-        self.spinner_label.pack(side=tk.LEFT, padx=(10, 5))
+        self.spinner_label.pack(side=tk.LEFT, padx=(8, 6))
 
         self.processing_status = tk.Label(
             self.processing_frame,
             text="",
-            font=("Consolas", 10),
-            fg=VSCODE_YELLOW,
-            bg=VSCODE_SURFACE,
+            font=("Courier New", 10),
+            fg=MINECRAFT_YELLOW,
+            bg=MINECRAFT_SURFACE,
             anchor=tk.W
         )
         self.processing_status.pack(side=tk.LEFT, fill=tk.X, expand=True)
@@ -633,9 +652,9 @@ class JiraReportApp:
         self.processing_detail = tk.Label(
             self.processing_frame,
             text="",
-            font=("Consolas", 8),
-            fg=VSCODE_TEXT_DIM,
-            bg=VSCODE_SURFACE,
+            font=("Courier New", 8),
+            fg=MINECRAFT_TEXT_DIM,
+            bg=MINECRAFT_SURFACE,
             anchor=tk.W
         )
         self.processing_detail.pack(side=tk.LEFT, fill=tk.X, expand=True)
@@ -648,7 +667,7 @@ class JiraReportApp:
             mode="determinate",
             style="Pixel.Horizontal.TProgressbar"
         )
-        self.progress_bar.pack(fill=tk.X, padx=10, pady=(0, 5))
+        self.progress_bar.pack(fill=tk.X, padx=8, pady=(0, 4))
 
         self.spinner_frames = ["◐", "◓", "◑", "◒"]
         self.spinner_index = 0
@@ -661,12 +680,11 @@ class JiraReportApp:
             bd=2,
             relief="solid",
             anchor=tk.W,
-            padx=10,
-            font=("Consolas", 9),
-            fg=VSCODE_TEXT_DIM,
-            bg=VSCODE_BG,
-            borderwidth=2,
-            highlightbackground=VSCODE_BORDER
+            padx=8,
+            font=("Courier New", 9),
+            fg=MINECRAFT_TEXT_DIM,
+            bg=MINECRAFT_BG,
+            borderwidth=3
         )
         self.status_bar.pack(side=tk.BOTTOM, fill=tk.X)
 
@@ -1702,6 +1720,17 @@ class JiraReportApp:
 
         return body
 
+    def _load_skill(self, skill_name):
+        """Load a skill markdown file and return its content."""
+        skill_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "skills", f"{skill_name}.md")
+        if os.path.exists(skill_path):
+            try:
+                with open(skill_path, "r", encoding="utf-8") as f:
+                    return f.read()
+            except:
+                pass
+        return None
+
     def batch_summarize_with_ai(self, issues_data, model):
         """Batch summarize multiple issues with a single API call
 
@@ -1736,13 +1765,19 @@ class JiraReportApp:
 
         period_note = "[本期]=报告周期内, [背景]=周期前背景。优先基于[本期]总结。\n" if has_context_tags else ""
         issues_block = "\n\n".join(combined_text)
-        prompt = (
-            f"{period_note}"
-            f"总结以下每个Jira issue技术进展，每项1~2句话。优先级：验证/恢复/关闭结果 > 当前用户或我方方案/文件/补丁 > 分析结论 > 待确认。\n"
-            f"必须写成动作+结果/状态，不要输出裸路径、文件名、NV/CFUN关键词或日志名。\n"
-            f"格式：issue_key: 总结内容（无实质进展才写：issue_key: 仍在排查中）\n\n"
-            f"{issues_block}"
-        )
+
+        # Load skill for prompt template
+        skill_content = self._load_skill("batch_ai_summary_skill")
+        if skill_content:
+            prompt = f"{period_note}{skill_content}\n\n{issues_block}"
+        else:
+            prompt = (
+                f"{period_note}"
+                f"总结以下每个Jira issue技术进展，每项1~2句话。优先级：验证/恢复/关闭结果 > 当前用户或我方方案/文件/补丁 > 分析结论 > 待确认。\n"
+                f"必须写成动作+结果/状态，不要输出裸路径、文件名、NV/CFUN关键词或日志名。\n"
+                f"格式：issue_key: 总结内容（无实质进展才写：issue_key: 仍在排查中）\n\n"
+                f"{issues_block}"
+            )
 
         try:
             headers = {
