@@ -1,7 +1,7 @@
 """
 Jira Weekly Report Generator
 Desktop app to generate Excel reports from Jira issues
-VSCode Dark + Pixel Art Theme
+Modern AI Tool UI - MiniMax/OpenAI Style
 """
 
 import tkinter as tk
@@ -21,45 +21,58 @@ from openpyxl.utils import get_column_letter
 from openpyxl.worksheet.datavalidation import DataValidation
 
 
-# Minecraft Pixel Art Theme Colors
-MINECRAFT_BG = "#1a1a1a"
-MINECRAFT_SURFACE = "#2d2d2d"
-MINECRAFT_SURFACE_ALT = "#3c3c3c"
-MINECRAFT_BORDER = "#1f1f1f"
-MINECRAFT_GRASS = "#5d8c3e"
-MINECRAFT_GRASS_DARK = "#4a7030"
-MINECRAFT_DIRT = "#8b6914"
-MINECRAFT_STONE = "#7a7a7a"
-MINECRAFT_WOOD = "#6b4423"
-MINECRAFT_COBBLE = "#555555"
-MINECRAFT_LAVA = "#ff4500"
-MINECRAFT_WATER = "#3f76e4"
-MINECRAFT_GOLD = "#ffd700"
-MINECRAFT_IRON = "#c0c0c0"
-MINECRAFT_TEXT = "#e8e8e8"
-MINECRAFT_TEXT_DIM = "#999999"
-MINECRAFT_GREEN = "#50fa7b"
-MINECRAFT_RED = "#ff5555"
-MINECRAFT_YELLOW = "#f1fa8c"
-MINECRAFT_AQUA = "#8be9fd"
-MINECRAFT_PURPLE = "#bd93f9"
-CHECKBOX_SELECT_BG = "#ffffff"
+# VSCode-inspired Dark Theme
+THEME_BG = "#1e1e1e"
+THEME_SURFACE = "#252526"
+THEME_SURFACE_RAISED = "#2d2d2d"
+THEME_SURFACE_HOVER = "#3c3c3c"
+THEME_BORDER = "#3c3c3c"
+THEME_PRIMARY = "#0e639c"
+THEME_PRIMARY_HOVER = "#1177bb"
+THEME_PRIMARY_GLOW = "#007acc"
+THEME_TEXT = "#cccccc"
+THEME_TEXT_SECONDARY = "#858585"
+THEME_TEXT_MUTED = "#6e6e6e"
+THEME_SUCCESS = "#4ec9b0"
+THEME_ERROR = "#f14c4c"
+THEME_WARNING = "#cca700"
+THEME_ACTIVITY_BAR = "#333333"
+THEME_STATUS_BAR = "#007acc"
 
-# Keep VSCODE colors as aliases for backward compatibility
-VSCODE_BG = MINECRAFT_BG
-VSCODE_SURFACE = MINECRAFT_SURFACE
-VSCODE_SURFACE_ALT = MINECRAFT_SURFACE_ALT
-VSCODE_BORDER = MINECRAFT_BORDER
-VSCODE_BLUE = MINECRAFT_WATER
-VSCODE_CYAN = MINECRAFT_AQUA
-VSCODE_ORANGE = MINECRAFT_GOLD
-VSCODE_GREEN = MINECRAFT_GREEN
-VSCODE_RED = MINECRAFT_RED
-VSCODE_YELLOW = MINECRAFT_YELLOW
-VSCODE_TEXT = MINECRAFT_TEXT
-VSCODE_TEXT_DIM = MINECRAFT_TEXT_DIM
-VSCODE_DISABLED = "#555555"
-VSCODE_SELECT = MINECRAFT_WATER
+# Backward compatibility
+MINECRAFT_BG = THEME_BG
+MINECRAFT_SURFACE = THEME_SURFACE
+MINECRAFT_SURFACE_ALT = THEME_SURFACE_RAISED
+MINECRAFT_BORDER = THEME_BORDER
+MINECRAFT_GRASS = THEME_PRIMARY
+MINECRAFT_GRASS_DARK = THEME_PRIMARY_HOVER
+MINECRAFT_STONE = THEME_SURFACE
+MINECRAFT_COBBLE = THEME_BORDER
+MINECRAFT_LAVA = THEME_ERROR
+MINECRAFT_WATER = THEME_PRIMARY
+MINECRAFT_GOLD = THEME_WARNING
+MINECRAFT_TEXT = THEME_TEXT
+MINECRAFT_TEXT_DIM = THEME_TEXT_SECONDARY
+MINECRAFT_GREEN = THEME_SUCCESS
+MINECRAFT_RED = THEME_ERROR
+MINECRAFT_YELLOW = THEME_WARNING
+MINECRAFT_AQUA = THEME_PRIMARY
+CHECKBOX_SELECT_BG = THEME_PRIMARY
+
+VSCODE_BG = THEME_BG
+VSCODE_SURFACE = THEME_SURFACE
+VSCODE_SURFACE_ALT = THEME_SURFACE_RAISED
+VSCODE_BORDER = THEME_BORDER
+VSCODE_BLUE = THEME_PRIMARY
+VSCODE_CYAN = THEME_PRIMARY
+VSCODE_ORANGE = THEME_WARNING
+VSCODE_GREEN = THEME_SUCCESS
+VSCODE_RED = THEME_ERROR
+VSCODE_YELLOW = THEME_WARNING
+VSCODE_TEXT = THEME_TEXT
+VSCODE_TEXT_DIM = THEME_TEXT_SECONDARY
+VSCODE_DISABLED = THEME_TEXT_MUTED
+VSCODE_SELECT = THEME_PRIMARY
 
 
 class OperationCancelled(Exception):
@@ -69,9 +82,9 @@ class OperationCancelled(Exception):
 class JiraReportApp:
     def __init__(self, root):
         self.root = root
-        self.root.title("Jira Report - Pixel Edition")
-        self.root.geometry("740x620")
-        self.root.minsize(680, 520)
+        self.root.title("Jira Report")
+        self.root.geometry("800x580")
+        self.root.minsize(750, 520)
         self.root.configure(bg=VSCODE_BG)
 
         # Jira API settings
@@ -87,18 +100,30 @@ class JiraReportApp:
         self.config_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".jira_config")
         self.last_save_dir = os.path.expanduser("~")
 
+        # Shared settings variables (created once, used by both Report and Settings pages)
+        self.ai_model_var = tk.StringVar(value="deepseek-chat")
+        self.api_key_var = tk.StringVar()
+        self.column_order_var = tk.StringVar(value="1,2,3,4,5,6,7")
+        self.key_issue_highlight_var = tk.BooleanVar(value=True)
+        self.comment_timestamp_prefix_var = tk.BooleanVar(value=False)
+        self.header_align_var = tk.StringVar(value="left")
+        self.cell_align_var = tk.StringVar(value="center")
+
         self.load_credentials()
         self.setup_ui()
 
+        # Apply saved values AFTER setup_ui creates the vars
         if self.saved_username:
             self.username_var.set(self.saved_username)
             self.password_var.set(self.saved_password)
             self.remember_var.set(True)
 
+        self.api_key_var.set(self.saved_deepseek_api_key)
         self.ai_model_var.set(self.saved_ai_model)
         self.column_order_var.set(self._normalize_column_order(self.saved_column_order))
         self.key_issue_highlight_var.set(self.saved_key_issue_highlight)
         self.comment_timestamp_prefix_var.set(self.saved_comment_timestamp_prefix)
+
         self.on_key_issue_highlight_toggle()
         self.on_comment_timestamp_toggle()
         self.on_fetch_comment_toggle()
@@ -132,7 +157,7 @@ class JiraReportApp:
                 json.dump({
                     "username": username,
                     "password": password,
-                    "deepseek_api_key": self.saved_deepseek_api_key,
+                    "deepseek_api_key": self.api_key_var.get(),
                     "ai_model": self.ai_model_var.get(),
                     "column_order": self._normalize_column_order(self.column_order_var.get()),
                     "key_issue_highlight": bool(self.key_issue_highlight_var.get()),
@@ -244,192 +269,230 @@ class JiraReportApp:
         return customer, model
 
     def style_widgets(self):
-        """Apply Minecraft Pixel Art style to ttk widgets"""
+        """Apply Modern AI Tool style to ttk widgets"""
         style = ttk.Style()
         style.theme_use('clam')
 
         # Frame
-        style.configure("TFrame", background=MINECRAFT_SURFACE)
+        style.configure("TFrame", background=THEME_SURFACE)
 
         # Labelframe
-        style.configure("TLabelframe", background=MINECRAFT_SURFACE, foreground=MINECRAFT_AQUA,
-                       bordercolor=MINECRAFT_BORDER, relief="solid")
-        style.configure("TLabelframe.Label", background=MINECRAFT_SURFACE, foreground=MINECRAFT_AQUA,
-                       font=("Courier New", 10, "bold"))
+        style.configure("TLabelframe", background=THEME_SURFACE, foreground=THEME_TEXT_SECONDARY,
+                       bordercolor=THEME_BORDER, relief="flat")
+        style.configure("TLabelframe.Label", background=THEME_SURFACE, foreground=THEME_TEXT_SECONDARY,
+                       font=("Consolas", 11, "bold"))
 
-        # Button - pixel style
-        style.configure("Pixel.TButton", background=MINECRAFT_COBBLE, foreground=MINECRAFT_TEXT,
-                       borderwidth=3, bordercolor=MINECRAFT_BORDER, relief="raised",
-                       font=("Courier New", 9))
-        style.map("Pixel.TButton",
-                 background=[("active", MINECRAFT_GRASS), ("pressed", MINECRAFT_STONE)],
-                 foreground=[("active", MINECRAFT_TEXT)])
+        # Primary Button
+        style.configure("Modern.TButton", background=THEME_PRIMARY, foreground=THEME_TEXT,
+                       borderwidth=0, relief="flat", font=("Consolas", 12, "bold"), padding=(20, 10))
+        style.map("Modern.TButton",
+                 background=[("active", THEME_PRIMARY_HOVER), ("pressed", THEME_PRIMARY)],
+                 foreground=[("active", THEME_TEXT)])
+
+        # Secondary Button
+        style.configure("Secondary.TButton", background=THEME_SURFACE_RAISED, foreground=THEME_TEXT_SECONDARY,
+                       borderwidth=1, bordercolor=THEME_BORDER, relief="flat", font=("Consolas", 11), padding=(16, 8))
+        style.map("Secondary.TButton",
+                 background=[("active", THEME_SURFACE_HOVER), ("pressed", THEME_SURFACE_RAISED)])
 
         # Entry
-        style.configure("Pixel.TEntry", fieldbackground=MINECRAFT_SURFACE_ALT,
-                       foreground=MINECRAFT_TEXT, bordercolor=MINECRAFT_BORDER,
-                       borderwidth=2, relief="raised")
+        style.configure("Modern.TEntry", fieldbackground=THEME_SURFACE_RAISED,
+                       foreground=THEME_TEXT, bordercolor=THEME_BORDER,
+                       borderwidth=1, relief="solid")
 
         # Combobox
-        style.configure("Pixel.TCombobox", fieldbackground=MINECRAFT_SURFACE_ALT,
-                       foreground=MINECRAFT_TEXT, background=MINECRAFT_SURFACE_ALT,
-                       bordercolor=MINECRAFT_BORDER, borderwidth=2, relief="raised")
-        style.map("Pixel.TCombobox",
-                 fieldbackground=[("readonly", MINECRAFT_SURFACE_ALT)],
-                 selectbackground=[("readonly", MINECRAFT_WATER)],
-                 selectforeground=[("readonly", MINECRAFT_TEXT)])
+        style.configure("Modern.TCombobox", fieldbackground=THEME_SURFACE_RAISED,
+                       foreground=THEME_TEXT, background=THEME_SURFACE_RAISED,
+                       bordercolor=THEME_BORDER, borderwidth=1, relief="solid")
+        style.map("Modern.TCombobox",
+                 fieldbackground=[("readonly", THEME_SURFACE_RAISED)],
+                 selectbackground=[("readonly", THEME_PRIMARY)],
+                 selectforeground=[("readonly", THEME_TEXT)])
 
         # Checkbutton
-        style.configure("Pixel.TCheckbutton", background=MINECRAFT_SURFACE,
-                       foreground=MINECRAFT_TEXT, font=("Courier New", 9))
-        style.map("Pixel.TCheckbutton",
-                 background=[("active", MINECRAFT_SURFACE)],
-                 indicatorcolor=[("selected", MINECRAFT_GRASS), ("!selected", MINECRAFT_COBBLE)])
+        style.configure("Modern.TCheckbutton", background=THEME_SURFACE,
+                       foreground=THEME_TEXT_SECONDARY, font=("Consolas", 11))
+        style.map("Modern.TCheckbutton",
+                 background=[("active", THEME_SURFACE)],
+                 indicatorcolor=[("selected", THEME_PRIMARY), ("!selected", THEME_BORDER)])
 
         # Scrollbar
-        style.configure("Vertical.TScrollbar", background=MINECRAFT_COBBLE,
-                       troughcolor=MINECRAFT_SURFACE, bordercolor=MINECRAFT_BORDER,
-                       arrowcolor=MINECRAFT_TEXT)
+        style.configure("Vertical.TScrollbar", background=THEME_BORDER,
+                       troughcolor=THEME_SURFACE, bordercolor=THEME_BORDER,
+                       arrowcolor=THEME_TEXT_SECONDARY)
 
         # Progressbar
-        style.configure("Pixel.Horizontal.TProgressbar",
-                       troughcolor=MINECRAFT_COBBLE, background=MINECRAFT_GRASS,
-                       bordercolor=MINECRAFT_BORDER, lightcolor=MINECRAFT_GRASS,
-                       darkcolor=MINECRAFT_GRASS_DARK)
+        style.configure("Modern.Horizontal.TProgressbar",
+                       troughcolor=THEME_SURFACE, background=THEME_PRIMARY,
+                       bordercolor=THEME_BORDER, lightcolor=THEME_PRIMARY,
+                       darkcolor=THEME_PRIMARY_HOVER)
+
+    def _create_card(self, parent, highlight=False):
+        """Create a modern card with subtle border and optional highlight"""
+        card = tk.Frame(parent, bg=THEME_SURFACE, padx=16, pady=16)
+        if highlight:
+            card.configure(highlightbackground=THEME_PRIMARY, highlightthickness=1,
+                          highlightcolor=THEME_PRIMARY)
+        return card
+
+    def _add_card_title(self, card, title, subtitle=None):
+        """Add title and optional subtitle to a card"""
+        title_frame = tk.Frame(card, bg=THEME_SURFACE)
+        title_frame.pack(anchor=tk.W, pady=(0, 12))
+        tk.Label(title_frame, text=title, font=("Consolas", 13, "bold"),
+                fg=THEME_TEXT, bg=THEME_SURFACE).pack(side=tk.LEFT)
+        if subtitle:
+            tk.Label(title_frame, text=subtitle, font=("Consolas", 9),
+                    fg=THEME_TEXT_MUTED, bg=THEME_SURFACE).pack(side=tk.LEFT, padx=(8, 0), pady=(2, 0))
+
+    def _create_section_label(self, parent, text):
+        """Create a small section label"""
+        return tk.Label(parent, text=text, font=("Consolas", 10),
+                       fg=THEME_TEXT_SECONDARY, bg=THEME_SURFACE)
+
+    def _create_input(self, parent, text_var, width=None, show=None):
+        """Create a modern input field"""
+        kwargs = {"textvariable": text_var, "style": "Modern.TEntry", "font": ("Consolas", 11)}
+        if width:
+            kwargs["width"] = width
+        if show:
+            kwargs["show"] = show
+        return ttk.Entry(parent, **kwargs)
+
+    def _create_combo(self, parent, text_var, values, width=15):
+        """Create a modern combobox"""
+        combo = ttk.Combobox(parent, textvariable=text_var, width=width,
+                            state="readonly", style="Modern.TCombobox", font=("Consolas", 11))
+        combo["values"] = values
+        return combo
+
+    def _create_checkbox(self, parent, text, variable, command=None, color=None):
+        """Create a modern checkbox"""
+        fg = color if color else THEME_TEXT
+        cb = tk.Checkbutton(parent, text=text, variable=variable,
+                          bg=THEME_SURFACE, fg=fg,
+                          selectcolor=THEME_PRIMARY, activebackground=THEME_SURFACE,
+                          activeforeground=fg, font=("Consolas", 11),
+                          cursor="hand2", command=command)
+        return cb
+
+    def _create_primary_button(self, parent, text, command, width=None):
+        """Create a primary CTA button with glow effect"""
+        btn = tk.Button(parent, text=text, command=command,
+                       bg=THEME_PRIMARY, fg=THEME_TEXT,
+                       activebackground=THEME_PRIMARY_HOVER, activeforeground=THEME_TEXT,
+                       relief="flat", borderwidth=0,
+                       font=("Consolas", 12, "bold"), cursor="hand2",
+                       padx=20, pady=8)
+        return btn
+
+    def _create_secondary_button(self, parent, text, command):
+        """Create a secondary button"""
+        btn = tk.Button(parent, text=text, command=command,
+                       bg=THEME_SURFACE_RAISED, fg=THEME_TEXT_SECONDARY,
+                       activebackground=THEME_SURFACE_HOVER, activeforeground=THEME_TEXT,
+                       relief="flat", borderwidth=1,
+                       font=("Consolas", 11), cursor="hand2",
+                       padx=16, pady=6)
+        return btn
 
     def setup_ui(self):
         self.style_widgets()
 
-        # Title with Minecraft pixel art style
-        title_frame = tk.Frame(self.root, bg=MINECRAFT_BG, pady=8)
-        title_frame.pack(fill=tk.X)
+        # Root background
+        self.root.configure(bg=THEME_BG)
 
-        # Minecraft-style banner frame
-        banner_frame = tk.Frame(title_frame, bg=MINECRAFT_STONE, padx=4, pady=2)
-        banner_frame.pack(pady=(0, 4))
+        # === Layout: Left Sidebar + Main Content ===
 
-        title_label = tk.Label(
-            banner_frame,
-            text="⛏ JIRA REPORT TOOL ⛏",
-            font=("Courier New", 16, "bold"),
-            fg=MINECRAFT_YELLOW,
-            bg=MINECRAFT_STONE
+        # Main container with sidebar
+        container = tk.Frame(self.root, bg=THEME_BG)
+        container.pack(fill=tk.BOTH, expand=True)
+
+        # --- Left Sidebar (VSCode-style Activity Bar) ---
+        self.sidebar = tk.Frame(container, bg=THEME_ACTIVITY_BAR, width=48)
+        self.sidebar.pack(side=tk.LEFT, fill=tk.Y)
+        self.sidebar.pack_propagate(False)
+
+        # Sidebar icons container
+        sidebar_icons = tk.Frame(self.sidebar, bg=THEME_ACTIVITY_BAR)
+        sidebar_icons.pack(fill=tk.X, pady=(8, 0))
+
+        # Track active page
+        self.current_page = tk.StringVar(value="settings")
+
+        # Report icon button
+        self.btn_report = tk.Frame(sidebar_icons, bg=THEME_ACTIVITY_BAR, cursor="hand2")
+        self.btn_report.pack(pady=(0, 4))
+        self.lbl_report = tk.Label(self.btn_report, text="📊", font=("Consolas", 16),
+                bg=THEME_ACTIVITY_BAR, fg="#888888")
+        self.lbl_report.pack(padx=8, pady=6)
+        self.btn_report.bind("<Button-1>", lambda e: self._show_page("report"))
+        self.lbl_report.bind("<Button-1>", lambda e: self._show_page("report"))
+
+        # Login/Settings icon button
+        self.btn_settings = tk.Frame(sidebar_icons, bg=THEME_ACTIVITY_BAR, cursor="hand2")
+        self.btn_settings.pack(pady=(0, 4))
+        self.lbl_settings = tk.Label(self.btn_settings, text="👤", font=("Consolas", 16),
+                bg=THEME_ACTIVITY_BAR, fg="#888888")
+        self.lbl_settings.pack(padx=8, pady=6)
+        self.btn_settings.bind("<Button-1>", lambda e: self._show_page("settings"))
+        self.lbl_settings.bind("<Button-1>", lambda e: self._show_page("settings"))
+
+        # User status at bottom
+        self.login_status_sidebar = tk.Label(
+            self.sidebar, text="●", font=("Consolas", 10),
+            fg=THEME_ERROR, bg=THEME_ACTIVITY_BAR,
+            anchor=tk.CENTER
         )
-        title_label.pack(padx=10, pady=4)
+        self.login_status_sidebar.pack(side=tk.BOTTOM, pady=(0, 12))
 
-        version_label = tk.Label(
-            title_frame,
-            text="[ v1.2 - Pixel Edition ]",
-            font=("Courier New", 8),
-            fg=MINECRAFT_TEXT_DIM,
-            bg=MINECRAFT_BG
-        )
-        version_label.pack()
+        # === Page: Report (Main) ===
+        self.page_report = tk.Frame(container, bg=THEME_BG)
+        self.page_settings = tk.Frame(container, bg=THEME_BG)
 
-        # Main container
-        main_frame = tk.Frame(self.root, bg=MINECRAFT_SURFACE, padx=12, pady=8)
-        main_frame.pack(fill=tk.BOTH, expand=True)
+        # Settings page will be populated in setup_ui after main_content
+        self._setup_settings_page()
 
-        # === Login Section ===
-        login_frame = tk.Frame(main_frame, bg=MINECRAFT_COBBLE, padx=8, pady=8,
-                               relief="solid", borderwidth=4)
-        login_frame.pack(fill=tk.X, pady=(0, 6))
+        # Show settings page by default (login page)
+        self._show_page("settings")
 
-        # Login title with pixel indicator
-        login_title = tk.Label(login_frame, text="⚿ LOGIN",
-                              font=("Courier New", 11, "bold"),
-                              fg=MINECRAFT_GOLD, bg=MINECRAFT_COBBLE)
-        login_title.grid(row=0, column=0, columnspan=10, sticky=tk.W, pady=(0, 6))
+        # === Main Content Area (Report Page) ===
+        main_content = self.page_report
 
-        # User row
-        login_frame.columnconfigure(1, weight=0)
-        login_frame.columnconfigure(3, weight=0)
-        login_frame.columnconfigure(5, weight=0)
-        login_frame.columnconfigure(7, weight=1)
+        # === Card: Date Range ===
+        date_card = self._create_card(main_content)
+        date_card.pack(fill=tk.X, pady=(0, 12))
 
-        ttk.Label(login_frame, text="User:").grid(
-            row=1, column=0, sticky=tk.W, padx=(0, 4))
-        self.username_var = tk.StringVar(value="")
-        username_entry = ttk.Entry(login_frame, textvariable=self.username_var, width=16,
-                                  style="Pixel.TEntry")
-        username_entry.grid(row=1, column=1, padx=(0, 6))
+        self._add_card_title(date_card, "Date Range", "Select reporting period")
 
-        ttk.Label(login_frame, text="Pwd:").grid(
-            row=1, column=2, sticky=tk.W, padx=(8, 4))
+        date_row = tk.Frame(date_card, bg=THEME_SURFACE)
+        date_row.pack(fill=tk.X)
 
-        self.password_var = tk.StringVar(value="")
-        self.password_entry = ttk.Entry(login_frame, textvariable=self.password_var, show="*",
-                                       width=16, style="Pixel.TEntry")
-        self.password_entry.grid(row=1, column=3, padx=(0, 6))
-
-        # Show/hide password toggle
-        self.show_password_var = tk.BooleanVar(value=False)
-        show_pwd_btn = tk.Checkbutton(login_frame, text="◉", variable=self.show_password_var,
-                                     command=self.toggle_password_visibility,
-                                     bg=MINECRAFT_COBBLE, fg=MINECRAFT_TEXT,
-                                     selectcolor=CHECKBOX_SELECT_BG, font=("Courier New", 10))
-        show_pwd_btn.grid(row=1, column=4, padx=2)
-
-        self.remember_var = tk.BooleanVar(value=False)
-        remember_btn = tk.Checkbutton(
-            login_frame, text="Remember", variable=self.remember_var,
-            bg=MINECRAFT_COBBLE, fg=MINECRAFT_TEXT,
-            selectcolor=CHECKBOX_SELECT_BG, activebackground=MINECRAFT_COBBLE,
-            activeforeground=MINECRAFT_TEXT, font=("Courier New", 9)
-        )
-        remember_btn.grid(row=1, column=5, padx=4)
-
-        self.login_btn = ttk.Button(login_frame, text="Login", command=self.login,
-                                    width=8, style="Pixel.TButton")
-        self.login_btn.grid(row=1, column=6, padx=(6, 3))
-
-        self.logout_btn = ttk.Button(login_frame, text="Logout", command=self.logout,
-                                     state=tk.DISABLED, width=8, style="Pixel.TButton")
-        self.logout_btn.grid(row=1, column=7, padx=(3, 0))
-
-        self.login_status = tk.Label(login_frame, text="● Not logged in",
-                                    font=("Courier New", 8),
-                                    fg=MINECRAFT_RED, bg=MINECRAFT_COBBLE)
-        self.login_status.grid(row=2, column=0, columnspan=10, sticky=tk.W, pady=(6, 0))
-
-        # === Filter Section ===
-        filter_frame = tk.Frame(main_frame, bg=MINECRAFT_COBBLE, padx=8, pady=8,
-                               relief="solid", borderwidth=4)
-        filter_frame.pack(fill=tk.X, pady=(0, 6))
-
-        # Filter title
-        filter_title = tk.Label(filter_frame, text="⚿ FILTERS",
-                               font=("Courier New", 11, "bold"),
-                               fg=MINECRAFT_GOLD, bg=MINECRAFT_COBBLE)
-        filter_title.grid(row=0, column=0, columnspan=12, sticky=tk.W, pady=(0, 6))
-
-        # Date row
-        date_inner = tk.Frame(filter_frame, bg=MINECRAFT_COBBLE)
-        date_inner.grid(row=1, column=0, columnspan=12, sticky=tk.W, pady=(0, 4))
-
-        ttk.Label(date_inner, text="Start:").grid(row=0, column=0, sticky=tk.W)
         self.start_date_var = tk.StringVar()
-        ttk.Entry(date_inner, textvariable=self.start_date_var, width=12,
-                 style="Pixel.TEntry").grid(row=0, column=1, padx=(4, 12))
-
-        ttk.Label(date_inner, text="End:").grid(row=0, column=2, sticky=tk.W)
         self.end_date_var = tk.StringVar()
-        ttk.Entry(date_inner, textvariable=self.end_date_var, width=12,
-                 style="Pixel.TEntry").grid(row=0, column=3, padx=(4, 12))
 
-        btn_frame = tk.Frame(date_inner, bg=MINECRAFT_COBBLE)
-        btn_frame.grid(row=0, column=4, padx=0)
+        ttk.Entry(date_row, textvariable=self.start_date_var, width=12,
+                 style="Modern.TEntry", font=("Consolas", 11)).pack(side=tk.LEFT, fill=tk.X, expand=True)
 
-        # Pixel style buttons
-        for txt, cmd, w in [("This Week", lambda: self.set_quick_date("week"), 10),
-                            ("Last Week", lambda: self.set_quick_date("last_week"), 10),
-                            ("This Month", lambda: self.set_quick_date("month"), 11)]:
-            btn = tk.Button(btn_frame, text=txt, command=cmd,
-                           bg=MINECRAFT_GRASS, fg=MINECRAFT_TEXT,
-                           activebackground=MINECRAFT_GRASS_DARK, activeforeground=MINECRAFT_TEXT,
-                           relief="raised", borderwidth=3, font=("Courier New", 8, "bold"),
-                           cursor="hand2", width=w)
-            btn.pack(side=tk.LEFT, padx=2)
+        tk.Label(date_row, text="—", fg=THEME_TEXT_MUTED, bg=THEME_SURFACE,
+                font=("Consolas", 12)).pack(side=tk.LEFT, padx=8)
+
+        ttk.Entry(date_row, textvariable=self.end_date_var, width=12,
+                 style="Modern.TEntry", font=("Consolas", 11)).pack(side=tk.LEFT, fill=tk.X, expand=True)
+
+        # Quick date buttons
+        quick_row = tk.Frame(date_card, bg=THEME_SURFACE)
+        quick_row.pack(fill=tk.X, pady=(10, 0))
+
+        for txt, cmd in [("This Week", lambda: self.set_quick_date("week")),
+                        ("Last Week", lambda: self.set_quick_date("last_week")),
+                        ("This Month", lambda: self.set_quick_date("month"))]:
+            btn = tk.Button(quick_row, text=txt, command=cmd,
+                           bg=THEME_SURFACE_RAISED, fg=THEME_TEXT_SECONDARY,
+                           activebackground=THEME_SURFACE_HOVER, activeforeground=THEME_TEXT,
+                           relief="flat", borderwidth=1,
+                           font=("Consolas", 10), cursor="hand2", padx=10, pady=4)
+            btn.pack(side=tk.LEFT, padx=(0, 6))
 
         # Default dates
         today = datetime.date.today()
@@ -437,255 +500,180 @@ class JiraReportApp:
         self.start_date_var.set(week_ago.strftime("%Y-%m-%d"))
         self.end_date_var.set(today.strftime("%Y-%m-%d"))
 
-        # Status row
-        status_select_frame = tk.Frame(filter_frame, bg=MINECRAFT_COBBLE)
-        status_select_frame.grid(row=2, column=0, columnspan=12, sticky=tk.W, pady=(0, 4))
+        # Auto-update filepath when dates change
+        self.start_date_var.trace_add("write", lambda *_: self._update_filepath())
+        self.end_date_var.trace_add("write", lambda *_: self._update_filepath())
 
-        ttk.Label(status_select_frame, text="Status:").grid(row=0, column=0, sticky=tk.W)
+        # === Card: Filters ===
+        filters_card = self._create_card(main_content)
+        filters_card.pack(fill=tk.X, pady=(0, 12))
+
+        self._add_card_title(filters_card, "Filters", "Configure report options")
+
+        # Status
+        status_row = tk.Frame(filters_card, bg=THEME_SURFACE)
+        status_row.pack(fill=tk.X, pady=(0, 10))
+
+        self._create_section_label(status_row, "Status").pack(side=tk.LEFT)
         self.status_filter_var = tk.StringVar(value="ALL")
-        status_combo = ttk.Combobox(status_select_frame, textvariable=self.status_filter_var,
-                                    width=18, state="readonly", style="Pixel.TCombobox")
-        status_combo["values"] = ["ALL", "WAIT FAE INFO", "WORKED AROUND", "WORKING",
-                                   "CLOSED", "RESOLVED", "WAIT 3RD PARTY"]
-        status_combo.grid(row=0, column=1, padx=(4, 0), sticky=tk.W)
+        self._create_combo(status_row, self.status_filter_var,
+                           ["ALL", "WAIT FAE INFO", "WORKED AROUND", "WORKING",
+                            "CLOSED", "RESOLVED", "WAIT 3RD PARTY"], width=18).pack(side=tk.LEFT, padx=(8, 0), fill=tk.X, expand=True)
 
-        # Column order row
-        column_order_frame = tk.Frame(filter_frame, bg=MINECRAFT_COBBLE)
-        column_order_frame.grid(row=3, column=0, columnspan=12, sticky=tk.W, pady=(0, 4))
+        # Columns
+        col_row = tk.Frame(filters_card, bg=THEME_SURFACE)
+        col_row.pack(fill=tk.X)
 
-        ttk.Label(column_order_frame, text="Columns:").grid(row=0, column=0, sticky=tk.W)
-        self.column_order_var = tk.StringVar(value="1,2,3,4,5,6,7")
-        ttk.Entry(column_order_frame, textvariable=self.column_order_var, width=20,
-                 style="Pixel.TEntry").grid(row=0, column=1, padx=(4, 8), sticky=tk.W)
-        col_help = tk.Label(column_order_frame,
-                           text="(1=Cust, 2=Mod, 3=Sum, 4=Jira#, 5=Sts, 6=Key, 7=Prog)",
-                           font=("Courier New", 7), fg=MINECRAFT_TEXT_DIM, bg=MINECRAFT_COBBLE)
-        col_help.grid(row=0, column=2, sticky=tk.W)
+        self._create_section_label(col_row, "Columns").pack(side=tk.LEFT)
+        ttk.Entry(col_row, textvariable=self.column_order_var,
+                 style="Modern.TEntry", font=("Consolas", 11)).pack(side=tk.LEFT, padx=(8, 0), fill=tk.X, expand=True)
 
-        # Progress source group
-        progress_source_frame = tk.Frame(
-            filter_frame, bg=MINECRAFT_STONE, padx=10, pady=8,
-            relief="solid", borderwidth=3
-        )
-        progress_source_frame.grid(row=4, column=0, columnspan=12, sticky=tk.EW, pady=(0, 4))
+        # === Card: AI Summary (Highlighted) ===
+        ai_card = self._create_card(main_content, highlight=True)
+        ai_card.pack(fill=tk.X, pady=(0, 12))
 
-        progress_source_title = tk.Label(
-            progress_source_frame, text="❖ Progress Source",
-            font=("Courier New", 10, "bold"), fg=MINECRAFT_AQUA, bg=MINECRAFT_STONE
-        )
-        progress_source_title.pack(anchor=tk.W, pady=(0, 5))
+        # AI card header with glow effect
+        ai_header = tk.Frame(ai_card, bg=THEME_SURFACE)
+        ai_header.pack(fill=tk.X, pady=(0, 12))
 
-        source_mode_row = tk.Frame(progress_source_frame, bg=MINECRAFT_STONE)
-        source_mode_row.pack(fill=tk.X)
+        tk.Label(ai_header, text="AI Summary", font=("Consolas", 13, "bold"),
+                fg=THEME_PRIMARY, bg=THEME_SURFACE).pack(side=tk.LEFT)
+        tk.Label(ai_header, text="Powered by DeepSeek", font=("Consolas", 9),
+                fg=THEME_TEXT_MUTED, bg=THEME_SURFACE).pack(side=tk.LEFT, padx=(8, 0), pady=(2, 0))
 
-        self.fetch_comment_var = tk.BooleanVar(value=False)
-        self.fetch_comment_cb = tk.Checkbutton(
-            source_mode_row, text="Fetch latest comment",
-            variable=self.fetch_comment_var,
-            bg=MINECRAFT_STONE, fg=MINECRAFT_TEXT,
-            selectcolor=CHECKBOX_SELECT_BG, font=("Courier New", 9),
-            cursor="hand2", command=self.on_fetch_comment_toggle
-        )
-        self.fetch_comment_cb.pack(side=tk.LEFT)
-
+        # AI options
         self.use_ai_summary_var = tk.BooleanVar(value=False)
-        self.ai_summary_cb = tk.Checkbutton(
-            source_mode_row, text="Use AI Summary",
-            variable=self.use_ai_summary_var,
-            bg=MINECRAFT_STONE, fg=MINECRAFT_YELLOW,
-            selectcolor=CHECKBOX_SELECT_BG, font=("Courier New", 9),
-            cursor="hand2", command=self.on_ai_summary_toggle
-        )
-        self.ai_summary_cb.pack(side=tk.LEFT, padx=(20, 0))
+        self._create_checkbox(ai_card, "Enable AI-powered summary",
+                             self.use_ai_summary_var, command=self.on_ai_summary_toggle,
+                             color=THEME_PRIMARY).pack(anchor=tk.W, pady=(0, 8))
 
-        self.timestamp_row = tk.Frame(progress_source_frame, bg=MINECRAFT_STONE)
-        self.comment_timestamp_prefix_var = tk.BooleanVar(value=False)
-        self.comment_timestamp_cb = tk.Checkbutton(
-            self.timestamp_row, text="Prefix Time",
-            variable=self.comment_timestamp_prefix_var,
-            bg=MINECRAFT_STONE, fg=MINECRAFT_TEXT_DIM,
-            selectcolor=CHECKBOX_SELECT_BG, font=("Courier New", 9),
-            cursor="hand2", command=self.on_comment_timestamp_toggle
-        )
-        self.comment_timestamp_cb.pack(anchor=tk.W, pady=(4, 0))
+        # AI Config (nested)
+        self.ai_config_outer = tk.Frame(ai_card, bg=THEME_SURFACE_RAISED, padx=10, pady=8)
+        self.ai_config_outer.pack(fill=tk.X, pady=(0, 8))
 
-        # AI Config frame (shown when AI summary is enabled)
-        self.ai_config_frame = tk.Frame(progress_source_frame, bg=MINECRAFT_STONE)
+        model_row = tk.Frame(self.ai_config_outer, bg=THEME_SURFACE_RAISED)
+        model_row.pack(fill=tk.X, pady=(0, 6))
 
-        ttk.Label(self.ai_config_frame, text="Model:").grid(
-            row=0, column=0, sticky=tk.W, padx=(0, 4))
-        self.ai_model_var = tk.StringVar(value="deepseek-chat")
-        ai_model_combo = ttk.Combobox(self.ai_config_frame, textvariable=self.ai_model_var,
-                                       width=18, state="readonly", style="Pixel.TCombobox")
-        ai_model_combo["values"] = ["deepseek-chat", "deepseek-coder", "deepseek-v4-flash", "deepseek-v4-pro"]
-        ai_model_combo.grid(row=0, column=1, padx=(0, 8), sticky=tk.W)
+        self._create_section_label(model_row, "Model").pack(side=tk.LEFT)
+        self._create_combo(model_row, self.ai_model_var,
+                           ["deepseek-chat", "deepseek-coder", "deepseek-v4-flash", "deepseek-v4-pro"],
+                           width=18).pack(side=tk.LEFT, padx=(8, 0), fill=tk.X, expand=True)
 
-        ai_note = tk.Label(self.ai_config_frame, text="(API Key in .jira_config)",
-                          font=("Courier New", 7), fg=MINECRAFT_TEXT_DIM, bg=MINECRAFT_STONE)
-        ai_note.grid(row=0, column=2, sticky=tk.W, padx=(4, 0))
+        batch_row = tk.Frame(self.ai_config_outer, bg=THEME_SURFACE_RAISED)
+        batch_row.pack(fill=tk.X)
 
-        # Batch mode toggle
         self.batch_mode_var = tk.BooleanVar(value=False)
-        self.batch_cb = tk.Checkbutton(self.ai_config_frame, text="Batch Mode",
-                                 variable=self.batch_mode_var,
-                                 bg=MINECRAFT_STONE, fg=MINECRAFT_AQUA,
-                                 selectcolor=CHECKBOX_SELECT_BG, font=("Courier New", 9),
-                                 cursor="hand2", command=self.on_batch_mode_toggle)
-        self.batch_cb.grid(row=0, column=3, padx=(12, 0), sticky=tk.W)
+        self._create_checkbox(batch_row, "Batch Mode", self.batch_mode_var,
+                             command=self.on_batch_mode_toggle).pack(side=tk.LEFT)
 
-        ttk.Label(self.ai_config_frame, text="Batch Size:").grid(
-            row=0, column=4, sticky=tk.W, padx=(12, 4))
+        tk.Label(batch_row, text="Size", font=("Consolas", 10),
+                fg=THEME_TEXT_SECONDARY, bg=THEME_SURFACE_RAISED).pack(side=tk.LEFT, padx=(12, 4))
         self.batch_size_var = tk.IntVar(value=10)
-        batch_size_entry = tk.Entry(self.ai_config_frame, textvariable=self.batch_size_var,
-                                    width=5, bg=MINECRAFT_SURFACE_ALT, fg=MINECRAFT_TEXT,
-                                    insertbackground=MINECRAFT_TEXT, relief="solid",
-                                    bd=2, font=("Courier New", 9))
-        batch_size_entry.grid(row=0, column=5, sticky=tk.W)
+        tk.Entry(batch_row, textvariable=self.batch_size_var, width=4,
+                bg=THEME_SURFACE, fg=THEME_TEXT, insertbackground=THEME_TEXT,
+                relief="solid", bd=1, font=("Consolas", 10), justify=tk.CENTER).pack(side=tk.LEFT)
 
-        # Initially hide AI config frame
-        self.ai_config_frame.pack_forget()
-        self.on_batch_mode_toggle()
+        self.ai_config_outer.pack_forget()
 
-        # Alignment row
-        align_frame = tk.Frame(filter_frame, bg=MINECRAFT_COBBLE)
-        align_frame.grid(row=5, column=0, columnspan=12, sticky=tk.W, pady=0)
+        # Other AI-related options
+        self.fetch_comment_var = tk.BooleanVar(value=False)
+        self._create_checkbox(ai_card, "Fetch latest comment",
+                             self.fetch_comment_var, command=self.on_fetch_comment_toggle).pack(anchor=tk.W, pady=(0, 6))
 
-        ttk.Label(align_frame, text="Header:").grid(row=0, column=0, sticky=tk.W)
-        self.header_align_var = tk.StringVar(value="left")
-        header_align_combo = ttk.Combobox(align_frame, textvariable=self.header_align_var,
-                                          width=9, state="readonly", style="Pixel.TCombobox")
-        header_align_combo["values"] = ["left", "center", "right"]
-        header_align_combo.grid(row=0, column=1, padx=(4, 12), sticky=tk.W)
+        self._create_checkbox(ai_card, "Prefix timestamp",
+                             self.comment_timestamp_prefix_var, command=self.on_comment_timestamp_toggle).pack(anchor=tk.W)
 
-        ttk.Label(align_frame, text="Cell:").grid(row=0, column=2, sticky=tk.W)
-        self.cell_align_var = tk.StringVar(value="center")
-        cell_align_combo = ttk.Combobox(align_frame, textvariable=self.cell_align_var,
-                                        width=9, state="readonly", style="Pixel.TCombobox")
-        cell_align_combo["values"] = ["left", "center", "right"]
-        cell_align_combo.grid(row=0, column=3, padx=(4, 12), sticky=tk.W)
+        # === Card: Output ===
+        output_card = self._create_card(main_content)
+        output_card.pack(fill=tk.X, pady=(0, 12))
 
-        self.key_issue_highlight_var = tk.BooleanVar(value=True)
-        self.key_issue_highlight_cb = tk.Checkbutton(
-            align_frame,
-            text="Key Issue Red",
-            variable=self.key_issue_highlight_var,
-            bg=MINECRAFT_COBBLE, fg=MINECRAFT_RED,
-            selectcolor=CHECKBOX_SELECT_BG, font=("Courier New", 9),
-            cursor="hand2", command=self.on_key_issue_highlight_toggle
-        )
-        self.key_issue_highlight_cb.grid(row=0, column=4, padx=(12, 0), sticky=tk.W)
+        self._add_card_title(output_card, "Output", "Save report to file")
 
-        # === Output Section ===
-        output_frame = tk.Frame(main_frame, bg=MINECRAFT_COBBLE, padx=8, pady=8,
-                               relief="solid", borderwidth=4)
-        output_frame.pack(fill=tk.X, pady=(0, 6))
+        output_row = tk.Frame(output_card, bg=THEME_SURFACE)
+        output_row.pack(fill=tk.X)
 
-        output_title = tk.Label(output_frame, text="⚿ OUTPUT",
-                               font=("Courier New", 11, "bold"),
-                               fg=MINECRAFT_GOLD, bg=MINECRAFT_COBBLE)
-        output_title.grid(row=0, column=0, columnspan=12, sticky=tk.W, pady=(0, 6))
-
-        output_inner = tk.Frame(output_frame, bg=MINECRAFT_COBBLE)
-        output_inner.grid(row=1, column=0, columnspan=12, sticky=tk.EW)
-        output_inner.columnconfigure(1, weight=1)
-
-        ttk.Label(output_inner, text="Save:").grid(row=0, column=0, sticky=tk.W)
         self.filepath_var = tk.StringVar()
         self.filepath_var.set(os.path.join(self.last_save_dir,
                          f"Jira_Weekly_Report_{datetime.date.today().strftime('%Y%m%d')}.xlsx"))
-        ttk.Entry(output_inner, textvariable=self.filepath_var, width=40,
-                 style="Pixel.TEntry").grid(row=0, column=1, padx=(4, 8), sticky=tk.EW)
-        ttk.Button(output_inner, text="...", command=self.browse_file, width=5,
-                  style="Pixel.TButton").grid(row=0, column=2, padx=(0, 0))
+        ttk.Entry(output_row, textvariable=self.filepath_var,
+                 style="Modern.TEntry", font=("Consolas", 11)).pack(side=tk.LEFT, fill=tk.X, expand=True)
 
-        # === Generate Button ===
-        gen_frame = tk.Frame(main_frame, bg=MINECRAFT_SURFACE)
-        gen_frame.pack(pady=6)
+        tk.Button(output_row, text="Browse", command=self.browse_file,
+                 bg=THEME_SURFACE_RAISED, fg=THEME_TEXT,
+                 activebackground=THEME_SURFACE_HOVER, relief="flat",
+                 borderwidth=1,
+                 font=("Consolas", 10), cursor="hand2", padx=10, pady=4).pack(side=tk.LEFT, padx=(8, 0))
 
-        self.generate_btn = tk.Button(
-            gen_frame,
-            text="▶ GENERATE REPORT",
-            command=self.generate_report,
-            state=tk.DISABLED,
-            bg=MINECRAFT_GRASS, fg=MINECRAFT_TEXT,
-            activebackground=MINECRAFT_GRASS_DARK, activeforeground=MINECRAFT_TEXT,
-            relief="raised", borderwidth=4, font=("Courier New", 11, "bold"),
-            cursor="hand2", padx=16, pady=4
+        # === Alignment Options ===
+        align_card = self._create_card(main_content)
+        align_card.pack(fill=tk.X, pady=(0, 16))
+
+        align_row = tk.Frame(align_card, bg=THEME_SURFACE)
+        align_row.pack(fill=tk.X)
+
+        self._create_section_label(align_row, "Header").pack(side=tk.LEFT)
+        self._create_combo(align_row, self.header_align_var, ["left", "center", "right"], width=8).pack(side=tk.LEFT, padx=(4, 16))
+
+        self._create_section_label(align_row, "Cell").pack(side=tk.LEFT)
+        self._create_combo(align_row, self.cell_align_var, ["left", "center", "right"], width=8).pack(side=tk.LEFT, padx=(4, 16), fill=tk.X, expand=True)
+
+        self._create_checkbox(align_row, "Key Issue Red",
+                             self.key_issue_highlight_var, color=THEME_ERROR).pack(side=tk.LEFT)
+
+        # === Action Buttons (Sidebar) ===
+        sidebar_actions = tk.Frame(self.sidebar, bg=THEME_ACTIVITY_BAR)
+        sidebar_actions.pack(side=tk.BOTTOM, fill=tk.X, pady=(8, 8))
+
+        self.generate_btn = self._create_primary_button(
+            sidebar_actions, "▶", self.generate_report
         )
-        self.generate_btn.pack(side=tk.LEFT, padx=(0, 10))
+        self.generate_btn.pack(fill=tk.X, padx=6, pady=(0, 4))
+        self.generate_btn.config(state=tk.DISABLED, width=3)
 
-        self.cancel_btn = tk.Button(
-            gen_frame,
-            text="■ CANCEL",
-            command=self.cancel_generation,
-            state=tk.DISABLED,
-            bg=MINECRAFT_LAVA, fg=MINECRAFT_TEXT,
-            activebackground=MINECRAFT_RED, activeforeground=MINECRAFT_TEXT,
-            relief="raised", borderwidth=4, font=("Courier New", 11, "bold"),
-            cursor="hand2", padx=16, pady=4
+        self.cancel_btn = self._create_secondary_button(
+            sidebar_actions, "✕", self.cancel_generation
         )
-        self.cancel_btn.pack(side=tk.LEFT)
+        self.cancel_btn.pack(fill=tk.X, padx=6)
+        self.cancel_btn.config(state=tk.DISABLED, width=3)
+
+        # === Sidebar Progress Fill (Full Background Animation) ===
+        self.progress_fill_frame = tk.Frame(self.sidebar, bg=THEME_ACTIVITY_BAR)
+        self.progress_fill_frame.pack(side=tk.LEFT, fill=tk.Y, ipadx=0)
+        self.progress_fill = tk.Frame(self.progress_fill_frame, bg=THEME_PRIMARY)
+        self.progress_fill.place(relx=0, rely=1, relw=1, relh=0, anchor="sw")
+        self.sidebar_progress = 0
 
         # === Processing Indicator ===
-        self.processing_frame = tk.Frame(main_frame, bg=MINECRAFT_SURFACE, pady=6)
+        self.processing_frame = tk.Frame(main_content, bg=THEME_BG)
         self.processing_frame.pack_forget()
 
-        self.spinner_label = tk.Label(
-            self.processing_frame,
-            text="◐",
-            font=("Courier New", 22),
-            fg=MINECRAFT_GOLD,
-            bg=MINECRAFT_SURFACE
-        )
-        self.spinner_label.pack(side=tk.LEFT, padx=(8, 6))
+        self.spinner_label = tk.Label(self.processing_frame, text="◐",
+                                     font=("Consolas", 16), fg=THEME_PRIMARY, bg=THEME_BG)
+        self.spinner_label.pack(side=tk.LEFT, padx=(0, 8))
 
-        self.processing_status = tk.Label(
-            self.processing_frame,
-            text="",
-            font=("Courier New", 10),
-            fg=MINECRAFT_YELLOW,
-            bg=MINECRAFT_SURFACE,
-            anchor=tk.W
-        )
+        self.processing_status = tk.Label(self.processing_frame, text="",
+                                         font=("Consolas", 11), fg=THEME_TEXT, bg=THEME_BG, anchor=tk.W)
         self.processing_status.pack(side=tk.LEFT, fill=tk.X, expand=True)
 
-        self.processing_detail = tk.Label(
-            self.processing_frame,
-            text="",
-            font=("Courier New", 8),
-            fg=MINECRAFT_TEXT_DIM,
-            bg=MINECRAFT_SURFACE,
-            anchor=tk.W
-        )
+        self.processing_detail = tk.Label(self.processing_frame, text="",
+                                        font=("Consolas", 9), fg=THEME_TEXT_MUTED, bg=THEME_BG, anchor=tk.W)
         self.processing_detail.pack(side=tk.LEFT, fill=tk.X, expand=True)
 
         self.progress_var = tk.DoubleVar(value=0)
-        self.progress_bar = ttk.Progressbar(
-            main_frame,
-            variable=self.progress_var,
-            maximum=100,
-            mode="determinate",
-            style="Pixel.Horizontal.TProgressbar"
-        )
-        self.progress_bar.pack(fill=tk.X, padx=8, pady=(0, 4))
+        self.progress_bar = ttk.Progressbar(main_content, variable=self.progress_var,
+                                          maximum=100, mode="determinate",
+                                          style="Modern.Horizontal.TProgressbar")
+        self.progress_bar.pack(fill=tk.X, pady=(0, 8))
+        self.progress_bar.pack_forget()
 
         self.spinner_frames = ["◐", "◓", "◑", "◒"]
         self.spinner_index = 0
         self.spinner_running = False
 
-        # === Status Bar ===
-        self.status_bar = tk.Label(
-            self.root,
-            text="► Ready - Please login to continue",
-            bd=2,
-            relief="solid",
-            anchor=tk.W,
-            padx=8,
-            font=("Courier New", 9),
-            fg=MINECRAFT_TEXT_DIM,
-            bg=MINECRAFT_BG,
-            borderwidth=3
-        )
+        # === Status Bar (VSCode style) ===
+        self.status_bar = tk.Label(self.root, text="Ready — Sign in to continue",
+                                   bd=0, relief=tk.FLAT, anchor=tk.W, padx=8,
+                                   font=("Consolas", 11), fg="#ffffff", bg=THEME_STATUS_BAR)
         self.status_bar.pack(side=tk.BOTTOM, fill=tk.X)
 
     def set_quick_date(self, period):
@@ -707,6 +695,16 @@ class JiraReportApp:
             end = today.replace(day=last_day)
         self.start_date_var.set(start.strftime("%Y-%m-%d"))
         self.end_date_var.set(end.strftime("%Y-%m-%d"))
+        self._update_filepath()
+
+    def _update_filepath(self):
+        """Update the output filepath based on current dates and username."""
+        start_str = self.start_date_var.get()
+        end_str = self.end_date_var.get()
+        # Extract username before @ for filename
+        username_short = self.username.split("@")[0] if self.username else "jira_report"
+        filename = f"{username_short}_{start_str}_{end_str}_jira_report.xlsx"
+        self.filepath_var.set(os.path.join(self.last_save_dir, filename))
 
     def browse_file(self):
         file_path = filedialog.asksaveasfilename(
@@ -726,27 +724,194 @@ class JiraReportApp:
         else:
             self.password_entry.config(show="*")
 
+    def _show_page(self, page_name):
+        """Switch between pages (report/settings)"""
+        self.current_page.set(page_name)
+
+        # Hide all pages
+        self.page_report.pack_forget()
+        self.page_settings.pack_forget()
+
+        # Show selected page
+        if page_name == "report":
+            self.page_report.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=16, pady=12)
+        else:
+            self.page_settings.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=16, pady=12)
+
+        self._highlight_sidebar(page_name)
+
+    def _highlight_sidebar(self, active):
+        """Highlight the active sidebar button"""
+        bg_active = "#1e1e1e"
+        fg_active = "#ffffff"
+        bg_inactive = THEME_ACTIVITY_BAR
+        fg_inactive = "#888888"
+
+        # Reset all
+        self.btn_report.configure(bg=bg_inactive)
+        self.btn_settings.configure(bg=bg_inactive)
+        for child in self.btn_report.winfo_children():
+            child.configure(bg=bg_inactive, fg=fg_inactive)
+        for child in self.btn_settings.winfo_children():
+            child.configure(bg=bg_inactive, fg=fg_inactive)
+
+        # Highlight active
+        if active == "report":
+            self.btn_report.configure(bg=bg_active)
+            for child in self.btn_report.winfo_children():
+                child.configure(bg=bg_active, fg=fg_active)
+        else:
+            self.btn_settings.configure(bg=bg_active)
+            for child in self.btn_settings.winfo_children():
+                child.configure(bg=bg_active, fg=fg_active)
+
+    def _setup_settings_page(self):
+        """Setup the Settings page with configuration options"""
+        # Title
+        tk.Label(self.page_settings, text="Settings",
+                font=("Consolas", 18, "bold"),
+                fg=THEME_TEXT, bg=THEME_BG).pack(anchor=tk.W, pady=(0, 16))
+
+        # === Jira Connection Card ===
+        conn_card = self._create_card(self.page_settings)
+        conn_card.pack(fill=tk.X, pady=(0, 12))
+
+        self._add_card_title(conn_card, "Jira Connection")
+
+        # Username
+        row = tk.Frame(conn_card, bg=THEME_SURFACE)
+        row.pack(fill=tk.X, pady=(0, 8))
+        tk.Label(row, text="Username:", font=("Consolas", 10),
+                fg=THEME_TEXT_SECONDARY, bg=THEME_SURFACE).pack(side=tk.LEFT)
+        self.username_var = tk.StringVar(value="")
+        ttk.Entry(row, textvariable=self.username_var,
+                 style="Modern.TEntry", font=("Consolas", 10)).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(8, 0))
+
+        # Password
+        row = tk.Frame(conn_card, bg=THEME_SURFACE)
+        row.pack(fill=tk.X, pady=(0, 8))
+        tk.Label(row, text="Password:", font=("Consolas", 10),
+                fg=THEME_TEXT_SECONDARY, bg=THEME_SURFACE).pack(side=tk.LEFT)
+        self.password_var = tk.StringVar(value="")
+        self.password_entry = ttk.Entry(row, textvariable=self.password_var, show="*",
+                                        style="Modern.TEntry", font=("Consolas", 10))
+        self.password_entry.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(8, 0))
+
+        # Remember checkbox
+        self.remember_var = tk.BooleanVar(value=False)
+        tk.Checkbutton(conn_card, text="Remember credentials",
+                      variable=self.remember_var,
+                      bg=THEME_SURFACE, fg=THEME_TEXT_SECONDARY,
+                      selectcolor=THEME_PRIMARY, activebackground=THEME_SURFACE,
+                      font=("Consolas", 9), cursor="hand2").pack(anchor=tk.W, pady=(0, 8))
+
+        # Login buttons
+        btn_row = tk.Frame(conn_card, bg=THEME_SURFACE)
+        btn_row.pack(fill=tk.X)
+        self.login_btn = ttk.Button(btn_row, text="Login", command=self.login,
+                                   width=10, style="Modern.TButton")
+        self.login_btn.pack(side=tk.LEFT)
+        self.logout_btn = ttk.Button(btn_row, text="Logout", command=self.logout,
+                                    state=tk.DISABLED, width=10, style="Secondary.TButton")
+        self.logout_btn.pack(side=tk.LEFT, padx=(8, 0))
+
+        self.login_status_label = tk.Label(conn_card, text="Not connected",
+                                          font=("Consolas", 9),
+                                          fg=THEME_ERROR, bg=THEME_SURFACE)
+        self.login_status_label.pack(anchor=tk.W, pady=(8, 0))
+
+        # === AI Settings Card ===
+        ai_card = self._create_card(self.page_settings)
+        ai_card.pack(fill=tk.X, pady=(0, 12))
+
+        self._add_card_title(ai_card, "AI Settings")
+
+        row = tk.Frame(ai_card, bg=THEME_SURFACE)
+        row.pack(fill=tk.X, pady=(0, 8))
+        tk.Label(row, text="API Key:", font=("Consolas", 10),
+                fg=THEME_TEXT_SECONDARY, bg=THEME_SURFACE).pack(side=tk.LEFT)
+        ttk.Entry(row, textvariable=self.api_key_var, show="*",
+                 style="Modern.TEntry", font=("Consolas", 10)).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(8, 0))
+
+        row = tk.Frame(ai_card, bg=THEME_SURFACE)
+        row.pack(fill=tk.X, pady=(0, 8))
+        tk.Label(row, text="Model:", font=("Consolas", 10),
+                fg=THEME_TEXT_SECONDARY, bg=THEME_SURFACE).pack(side=tk.LEFT)
+        ttk.Combobox(row, textvariable=self.ai_model_var, width=18, state="readonly",
+                    style="Modern.TCombobox", font=("Consolas", 10),
+                    values=["deepseek-chat", "deepseek-coder", "deepseek-v4-flash", "deepseek-v4-pro"]).pack(side=tk.LEFT, padx=(8, 0), fill=tk.X, expand=True)
+
+        # === Default Report Settings Card ===
+        report_card = self._create_card(self.page_settings)
+        report_card.pack(fill=tk.X, pady=(0, 12))
+
+        self._add_card_title(report_card, "Default Report Settings")
+
+        row = tk.Frame(report_card, bg=THEME_SURFACE)
+        row.pack(fill=tk.X, pady=(0, 8))
+        tk.Label(row, text="Columns:", font=("Consolas", 10),
+                fg=THEME_TEXT_SECONDARY, bg=THEME_SURFACE).pack(side=tk.LEFT)
+        ttk.Entry(row, textvariable=self.column_order_var,
+                 style="Modern.TEntry", font=("Consolas", 10)).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(8, 0))
+
+        row = tk.Frame(report_card, bg=THEME_SURFACE)
+        row.pack(fill=tk.X, pady=(0, 8))
+        tk.Label(row, text="Header Align:", font=("Consolas", 10),
+                fg=THEME_TEXT_SECONDARY, bg=THEME_SURFACE).pack(side=tk.LEFT)
+        ttk.Combobox(row, textvariable=self.header_align_var, width=10, state="readonly",
+                    style="Modern.TCombobox", font=("Consolas", 10),
+                    values=["left", "center", "right"]).pack(side=tk.LEFT, padx=(8, 0))
+
+        row = tk.Frame(report_card, bg=THEME_SURFACE)
+        row.pack(fill=tk.X, pady=(0, 8))
+        tk.Label(row, text="Cell Align:", font=("Consolas", 10),
+                fg=THEME_TEXT_SECONDARY, bg=THEME_SURFACE).pack(side=tk.LEFT)
+        ttk.Combobox(row, textvariable=self.cell_align_var, width=10, state="readonly",
+                    style="Modern.TCombobox", font=("Consolas", 10),
+                    values=["left", "center", "right"]).pack(side=tk.LEFT, padx=(8, 0))
+
+        tk.Checkbutton(report_card, text="Highlight key issues in red",
+                      variable=self.key_issue_highlight_var,
+                      bg=THEME_SURFACE, fg=THEME_ERROR,
+                      selectcolor=THEME_PRIMARY, activebackground=THEME_SURFACE,
+                      font=("Consolas", 9), cursor="hand2").pack(anchor=tk.W, pady=(0, 8))
+
+        # Save button
+        tk.Button(report_card, text="Save Settings", command=self._save_settings,
+                 bg=THEME_PRIMARY, fg=THEME_TEXT,
+                 activebackground=THEME_PRIMARY_HOVER, relief="flat",
+                 font=("Consolas", 10, "bold"), cursor="hand2", padx=16, pady=6).pack(anchor=tk.E)
+
+    def _save_settings(self):
+        """Save all settings to config file"""
+        try:
+            data = {
+                "username": self.username_var.get(),
+                "password": self.password_var.get() if self.remember_var.get() else "",
+                "deepseek_api_key": self.api_key_var.get(),
+                "ai_model": self.ai_model_var.get(),
+                "column_order": self._normalize_column_order(self.column_order_var.get()),
+                "key_issue_highlight": bool(self.key_issue_highlight_var.get()),
+                "comment_timestamp_prefix": bool(self.comment_timestamp_prefix_var.get()),
+                "last_save_dir": self.last_save_dir
+            }
+            with open(self.config_file, "w") as f:
+                json.dump(data, f)
+            messagebox.showinfo("Success", "Settings saved successfully!")
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to save settings:\n{e}")
+
     def on_ai_summary_toggle(self):
         if self.use_ai_summary_var.get():
-            self.ai_config_frame.pack(fill=tk.X, pady=(6, 0))
+            self.ai_config_outer.pack(fill=tk.X, pady=(0, 8))
             self.fetch_comment_var.set(False)
-            self.fetch_comment_cb.config(fg=VSCODE_DISABLED)
-            self.on_fetch_comment_toggle()
         else:
-            self.ai_config_frame.pack_forget()
-            self.fetch_comment_cb.config(fg=VSCODE_TEXT)
+            self.ai_config_outer.pack_forget()
 
     def on_fetch_comment_toggle(self):
         if self.fetch_comment_var.get():
             self.use_ai_summary_var.set(False)
-            self.ai_config_frame.pack_forget()
-            self.ai_summary_cb.config(fg=VSCODE_DISABLED)
-            self.comment_timestamp_cb.config(fg=VSCODE_TEXT)
-            self.timestamp_row.pack(anchor=tk.W, pady=(4, 0))
-        else:
-            self.ai_summary_cb.config(fg=VSCODE_YELLOW)
-            self.comment_timestamp_cb.config(fg=VSCODE_TEXT_DIM)
-            self.timestamp_row.pack_forget()
+            self.ai_config_outer.pack_forget()
 
     def on_batch_mode_toggle(self):
         self.save_ui_preferences()
@@ -856,12 +1021,14 @@ class JiraReportApp:
         if self.remember_var.get():
             self.save_credentials(username, self.password_var.get())
 
-        self.login_status.config(text=f"● Logged in: {username}", fg=VSCODE_GREEN)
+        self.login_status_sidebar.config(text=f"●", fg=THEME_SUCCESS)
+        self.login_status_label.config(text=f"Connected: {username}", fg=THEME_SUCCESS)
         self.login_btn.config(state=tk.DISABLED)
         self.logout_btn.config(state=tk.NORMAL)
         self.generate_btn.config(state=tk.NORMAL)
+        self._update_filepath()
         self.update_status(f"► Logged in as {username}")
-        messagebox.showinfo("Success", "Login successful!")
+        self._show_page("report")
 
     def logout(self):
         if self.logged_in:
@@ -872,7 +1039,8 @@ class JiraReportApp:
             self.logged_in = False
             self.username = None
             self.user_email = None
-            self.login_status.config(text="● Not logged in", fg=VSCODE_RED)
+            self.login_status_sidebar.config(text="●", fg=THEME_ERROR)
+            self.login_status_label.config(text="Not connected", fg=THEME_ERROR)
             self.login_btn.config(state=tk.NORMAL)
             self.logout_btn.config(state=tk.DISABLED)
             self.generate_btn.config(state=tk.DISABLED)
@@ -897,8 +1065,18 @@ class JiraReportApp:
         self.processing_status.config(text=status_text)
         self.processing_detail.config(text="")
         self.progress_var.set(0)
-        self.processing_frame.pack(fill=tk.X, pady=(5, 0))
+        self.processing_frame.pack(fill=tk.X, pady=(8, 0))
+        self.progress_bar.pack(fill=tk.X, pady=(0, 8))
+        self.sidebar_progress = 0
+        self._update_sidebar_progress(0)
         self._spin_step()
+        self.root.update_idletasks()
+
+    def _update_sidebar_progress(self, progress):
+        """Update sidebar background fill progress (0-100)"""
+        self.sidebar_progress = progress
+        relh = progress / 100.0
+        self.progress_fill.place_configure(relh=relh)
         self.root.update_idletasks()
 
     def update_processing(self, status_text, detail_text="", progress=None):
@@ -907,13 +1085,16 @@ class JiraReportApp:
         self.processing_detail.config(text=detail_text)
         if progress is not None:
             self.progress_var.set(max(0, min(100, progress)))
+            self._update_sidebar_progress(progress)
         self.root.update_idletasks()
 
     def stop_processing(self):
         """Hide processing animation"""
         self.spinner_running = False
         self.processing_frame.pack_forget()
+        self.progress_bar.pack_forget()
         self.progress_var.set(0)
+        self._update_sidebar_progress(0)
         self.root.update_idletasks()
 
     def cancel_generation(self):
@@ -921,7 +1102,7 @@ class JiraReportApp:
         if not self.generation_running:
             return
         self.cancel_event.set()
-        self.cancel_btn.config(state=tk.DISABLED, text="CANCELLING...")
+        self.cancel_btn.config(state=tk.DISABLED, text="...")
         self.update_processing("Cancelling...", "Waiting for current request to finish...", self.progress_var.get())
 
     def check_cancelled(self):
@@ -934,7 +1115,7 @@ class JiraReportApp:
         self.stop_processing()
         if self.logged_in and enable_generate:
             self.generate_btn.config(state=tk.NORMAL)
-        self.cancel_btn.config(state=tk.DISABLED, text="■ CANCEL")
+        self.cancel_btn.config(state=tk.DISABLED, text="✕")
 
     def generate_report(self):
         if not self.logged_in:
@@ -977,7 +1158,7 @@ class JiraReportApp:
         self.cancel_event.clear()
         self.generation_running = True
         self.generate_btn.config(state=tk.DISABLED)
-        self.cancel_btn.config(state=tk.NORMAL, text="■ CANCEL")
+        self.cancel_btn.config(state=tk.NORMAL, text="✕")
         self.start_processing("Starting...")
 
         thread = threading.Thread(target=self._generate_report_work,
@@ -993,7 +1174,7 @@ class JiraReportApp:
             if status_clause:
                 jql_normal += f' AND {status_clause}'
 
-            jql_wait3rd = f'"{engineer_field}" IN (currentUser()) AND status = "WAIT 3RD PARTY"'
+            jql_wait3rd = f'"{engineer_field}" IN (currentUser()) AND status = "WAIT 3RD PARTY" AND updated >= {start_date} AND updated <= "{end_date} 23:59"'
             if status_clause:
                 jql_wait3rd += f' AND {status_clause}'
 
@@ -1001,7 +1182,7 @@ class JiraReportApp:
             if status_clause:
                 jql_assist_normal += f' AND {status_clause}'
 
-            jql_assist_wait3rd = f'comment ~ currentUser() AND "{engineer_field}" != currentUser() AND status = "WAIT 3RD PARTY"'
+            jql_assist_wait3rd = f'comment ~ currentUser() AND "{engineer_field}" != currentUser() AND status = "WAIT 3RD PARTY" AND updated >= {start_date} AND updated <= "{end_date} 23:59"'
             if status_clause:
                 jql_assist_wait3rd += f' AND {status_clause}'
 
@@ -1024,7 +1205,61 @@ class JiraReportApp:
             self.root.after(0, lambda: self.update_processing(f"Found {len(issues_assist)} assist issues", f"{len(issues_assist_normal)} normal + {len(issues_assist_wait3rd)} WAIT_3RD", 35))
 
             closed_statuses = {"CLOSED", "RESOLVED"}
-            no_comment_required_statuses = {"WAIT 3RD PARTY"}
+            no_comment_required_statuses = {"WAIT 3RD PARTY", "WORKING"}
+            wait_blocked_statuses = {"WAIT FAE INFO", "WORKED AROUND", "WAIT OFFICIAL RELEASE"}
+
+            def is_in_date_range(issue):
+                """Check if issue's created time or latest comment time is within date range"""
+                created_str = issue.get("fields", {}).get("created", "")
+                dt = self._parse_jira_datetime(created_str)
+                if dt and start_date <= dt.date() <= end_date:
+                    return True
+                return self.user_commented_in_date_range(issue['key'], start_date, end_date)
+
+            def should_include_issue(issue, start_date, end_date):
+                """判断一个 issue 是否应该包含在报告中
+
+                逻辑：
+                1. WAIT 3RD PARTY/WORKING：created时间或评论时间在时间区间内才保留
+                2. WAIT FAE INFO/WORKED AROUND/WAIT OFFICIAL RELEASE：
+                   - 情景1：SDE是当前用户 且 assignee非当前用户 → 直接保留
+                   - 情景3：SDE非当前用户 → 当前用户在时间区间内有评论才保留
+                3. CLOSED/RESOLVED 状态：3个月内有评论才保留
+                4. 其他状态：当前用户在时间区间内有评论就保留
+                """
+                status = issue.get("fields", {}).get("status", {}).get("name", "")
+                fields = issue.get("fields", {})
+                assignee_field = fields.get("assignee", {})
+                assignee_name = assignee_field.get("name", "") or ""
+
+                if status in no_comment_required_statuses:
+                    return is_in_date_range(issue)
+
+                if status in wait_blocked_statuses:
+                    # 情景1：SDE是当前用户 且 assignee非当前用户 → 直接保留
+                    # 情景3：SDE非当前用户 → 当前用户在时间区间内有评论才保留
+                    # 检查SDE是否是当前用户 - 通过JQL获取的来源判断
+                    # issues_assigned的JQL保证SDE是当前用户
+                    # issues_assist的JQL保证SDE不是当前用户
+                    in_assigned = any(a['key'] == issue['key'] for a in issues_assigned)
+                    if in_assigned:
+                        # SDE是当前用户（jql_normal保证），检查是否是情景1
+                        if assignee_name.lower() != self.username.split("@")[0].lower():
+                            # 情景1：SDE是当前用户 且 assignee非当前用户 → 直接保留
+                            return True
+                        # assignee是当前用户，需要当前用户在时间区间内有评论
+                        return self.user_commented_in_date_range(issue['key'], start_date, end_date)
+                    else:
+                        # SDE不是当前用户（jql_assist_normal保证），是情景3
+                        # 需要当前用户在时间区间内有评论才保留
+                        return self.user_commented_in_date_range(issue['key'], start_date, end_date)
+
+                if status in closed_statuses:
+                    return self.user_commented_within_months(issue['key'], months=3)
+
+                # 其他状态：当前用户在时间区间内有评论就保留
+                return self.user_commented_in_date_range(issue['key'], start_date, end_date)
+
             self.root.after(0, lambda: self.update_processing("Filtering issues...", f"Checking {len(issues_assigned)} assigned issues"))
             issues_assigned_filtered = []
             assigned_total = max(len(issues_assigned), 1)
@@ -1032,17 +1267,10 @@ class JiraReportApp:
                 self.check_cancelled()
                 progress = 35 + (idx / assigned_total) * 15
                 status = issue.get("fields", {}).get("status", {}).get("name", "")
-                if status in closed_statuses:
-                    if not self.user_commented_within_months(issue['key'], months=3):
-                        self.root.after(0, lambda k=issue['key'], s=status, p=progress: self.update_processing("Filtering issues...", f"Skipping {k} - {s}", p))
-                        continue
-                    issues_assigned_filtered.append(issue)
-                elif status in no_comment_required_statuses:
-                    issues_assigned_filtered.append(issue)
-                elif self.user_commented_in_date_range(issue['key'], start_date, end_date):
+                if should_include_issue(issue, start_date, end_date):
                     issues_assigned_filtered.append(issue)
                 else:
-                    self.root.after(0, lambda k=issue['key'], p=progress: self.update_processing("Filtering issues...", f"Skipping {k}", p))
+                    self.root.after(0, lambda k=issue['key'], p=progress: self.update_processing("Filtering issues...", f"Skipping {k} - no activity", p))
             issues_assigned = issues_assigned_filtered
 
             self.check_cancelled()
@@ -1052,25 +1280,21 @@ class JiraReportApp:
             for idx, issue in enumerate(issues_assist, 1):
                 self.check_cancelled()
                 progress = 50 + (idx / assist_total) * 15
-                status = issue.get("fields", {}).get("status", {}).get("name", "")
-                if status in closed_statuses:
-                    if not self.user_commented_within_months(issue['key'], months=3):
-                        self.root.after(0, lambda k=issue['key'], s=status, p=progress: self.update_processing("Filtering issues...", f"Skipping {k} - {s}", p))
-                        continue
-                    issues_assist_filtered.append(issue)
-                elif status in no_comment_required_statuses:
-                    issues_assist_filtered.append(issue)
-                elif self.user_commented_in_date_range(issue['key'], start_date, end_date):
+                if should_include_issue(issue, start_date, end_date):
                     issues_assist_filtered.append(issue)
                 else:
-                    self.root.after(0, lambda k=issue['key'], p=progress: self.update_processing("Filtering issues...", f"Skipping {k}", p))
+                    self.root.after(0, lambda k=issue['key'], p=progress: self.update_processing("Filtering issues...", f"Skipping {k} - no activity", p))
             issues_assist = issues_assist_filtered
 
             all_issues = {issue['key']: issue for issue in issues_assigned + issues_assist}
             issues = list(all_issues.values())
 
-            status_order = {"CLOSED": 0, "RESOLVED": 1, "WORKING": 2, "WORKED AROUND": 3, "WAIT FAE INFO": 4, "WAIT 3RD PARTY": 5}
-            issues.sort(key=lambda x: (status_order.get(x.get("fields", {}).get("status", {}).get("name", ""), 99), x.get("key", "")))
+            def get_created_timestamp(issue):
+                created_str = issue.get("fields", {}).get("created", "")
+                dt = self._parse_jira_datetime(created_str)
+                return dt.timestamp() if dt else 0
+
+            issues.sort(key=lambda x: -get_created_timestamp(x))
 
             self.check_cancelled()
             self.root.after(0, lambda: self.update_processing(f"Found {len(issues)} total issues", "Generating Excel...", 70))
@@ -1101,7 +1325,7 @@ class JiraReportApp:
             "jql": jql,
             "startAt": start_at,
             "maxResults": max_results,
-            "fields": "summary,status,priority,created,updated,creator,key,customfield_11029,customfield_12031,customfield_10100,customfield_10102,customfield_10400,customfield_10401"
+            "fields": "summary,status,priority,created,updated,creator,key,assignee,customfield_11029,customfield_12031,customfield_10100,customfield_10102,customfield_10400,customfield_10401"
         }
 
         while True:
