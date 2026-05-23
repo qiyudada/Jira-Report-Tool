@@ -21,23 +21,24 @@ from openpyxl.utils import get_column_letter
 from openpyxl.worksheet.datavalidation import DataValidation
 
 
-# VSCode-inspired Dark Theme
-THEME_BG = "#1e1e1e"
-THEME_SURFACE = "#252526"
-THEME_SURFACE_RAISED = "#2d2d2d"
-THEME_SURFACE_HOVER = "#3c3c3c"
-THEME_BORDER = "#3c3c3c"
-THEME_PRIMARY = "#0e639c"
-THEME_PRIMARY_HOVER = "#1177bb"
-THEME_PRIMARY_GLOW = "#007acc"
-THEME_TEXT = "#cccccc"
-THEME_TEXT_SECONDARY = "#858585"
-THEME_TEXT_MUTED = "#6e6e6e"
+# MiniMax-inspired dark product theme
+THEME_BG = "#050505"
+THEME_SURFACE = "#101010"
+THEME_SURFACE_RAISED = "#181818"
+THEME_SURFACE_HOVER = "#242424"
+THEME_BORDER = "#2f2f2f"
+THEME_PRIMARY = "#c7ff3d"
+THEME_PRIMARY_HOVER = "#d8ff69"
+THEME_PRIMARY_GLOW = "#8cff00"
+THEME_PRIMARY_TEXT = "#070707"
+THEME_TEXT = "#f4f4f4"
+THEME_TEXT_SECONDARY = "#b7b7b7"
+THEME_TEXT_MUTED = "#747474"
 THEME_SUCCESS = "#4ec9b0"
-THEME_ERROR = "#f14c4c"
-THEME_WARNING = "#cca700"
-THEME_ACTIVITY_BAR = "#333333"
-THEME_STATUS_BAR = "#007acc"
+THEME_ERROR = "#ff5c5c"
+THEME_WARNING = "#f2c94c"
+THEME_ACTIVITY_BAR = "#0b0b0b"
+THEME_STATUS_BAR = "#101010"
 
 # Backward compatibility
 MINECRAFT_BG = THEME_BG
@@ -83,8 +84,8 @@ class JiraReportApp:
     def __init__(self, root):
         self.root = root
         self.root.title("Jira Report")
-        self.root.geometry("800x580")
-        self.root.minsize(750, 520)
+        self.root.geometry("1040x680")
+        self.root.minsize(920, 620)
         self.root.configure(bg=VSCODE_BG)
 
         # Jira API settings
@@ -217,6 +218,39 @@ class JiraReportApp:
             return " - ".join(parts)
         return str(value).strip()
 
+    def _user_identity_values(self, user):
+        """Return comparable Jira user identifiers from a REST user object."""
+        if isinstance(user, list):
+            values = set()
+            for item in user:
+                values.update(self._user_identity_values(item))
+            return values
+
+        if not isinstance(user, dict):
+            return set()
+
+        values = set()
+        for key in ("name", "key", "emailAddress", "accountId", "displayName"):
+            raw = str(user.get(key, "") or "").strip().lower()
+            if raw:
+                values.add(raw)
+                if "@" in raw:
+                    values.add(raw.split("@", 1)[0])
+        return values
+
+    def _current_user_identity_values(self):
+        values = set()
+        for raw in (self.username, self.user_email):
+            text = str(raw or "").strip().lower()
+            if text:
+                values.add(text)
+                if "@" in text:
+                    values.add(text.split("@", 1)[0])
+        return values
+
+    def _is_current_user(self, user):
+        return bool(self._current_user_identity_values() & self._user_identity_values(user))
+
     def _is_jira_issue_key_text(self, text):
         return bool(re.fullmatch(r'[A-Z][A-Z0-9]+-\d+', str(text or "").strip(), flags=re.IGNORECASE))
 
@@ -283,11 +317,11 @@ class JiraReportApp:
                        font=("Consolas", 11, "bold"))
 
         # Primary Button
-        style.configure("Modern.TButton", background=THEME_PRIMARY, foreground=THEME_TEXT,
+        style.configure("Modern.TButton", background=THEME_PRIMARY, foreground=THEME_PRIMARY_TEXT,
                        borderwidth=0, relief="flat", font=("Consolas", 12, "bold"), padding=(20, 10))
         style.map("Modern.TButton",
                  background=[("active", THEME_PRIMARY_HOVER), ("pressed", THEME_PRIMARY)],
-                 foreground=[("active", THEME_TEXT)])
+                 foreground=[("active", THEME_PRIMARY_TEXT)])
 
         # Secondary Button
         style.configure("Secondary.TButton", background=THEME_SURFACE_RAISED, foreground=THEME_TEXT_SECONDARY,
@@ -329,7 +363,9 @@ class JiraReportApp:
 
     def _create_card(self, parent, highlight=False):
         """Create a modern card with subtle border and optional highlight"""
-        card = tk.Frame(parent, bg=THEME_SURFACE, padx=16, pady=16)
+        card = tk.Frame(parent, bg=THEME_SURFACE, padx=18, pady=16,
+                        highlightbackground=THEME_BORDER, highlightthickness=1,
+                        highlightcolor=THEME_BORDER)
         if highlight:
             card.configure(highlightbackground=THEME_PRIMARY, highlightthickness=1,
                           highlightcolor=THEME_PRIMARY)
@@ -379,8 +415,8 @@ class JiraReportApp:
     def _create_primary_button(self, parent, text, command, width=None):
         """Create a primary CTA button with glow effect"""
         btn = tk.Button(parent, text=text, command=command,
-                       bg=THEME_PRIMARY, fg=THEME_TEXT,
-                       activebackground=THEME_PRIMARY_HOVER, activeforeground=THEME_TEXT,
+                       bg=THEME_PRIMARY, fg=THEME_PRIMARY_TEXT,
+                       activebackground=THEME_PRIMARY_HOVER, activeforeground=THEME_PRIMARY_TEXT,
                        relief="flat", borderwidth=0,
                        font=("Consolas", 12, "bold"), cursor="hand2",
                        padx=20, pady=8)
@@ -408,8 +444,8 @@ class JiraReportApp:
         container = tk.Frame(self.root, bg=THEME_BG)
         container.pack(fill=tk.BOTH, expand=True)
 
-        # --- Left Sidebar (VSCode-style Activity Bar) ---
-        self.sidebar = tk.Frame(container, bg=THEME_ACTIVITY_BAR, width=48)
+        # --- Left Sidebar ---
+        self.sidebar = tk.Frame(container, bg=THEME_ACTIVITY_BAR, width=56)
         self.sidebar.pack(side=tk.LEFT, fill=tk.Y)
         self.sidebar.pack_propagate(False)
 
@@ -423,18 +459,18 @@ class JiraReportApp:
         # Report icon button
         self.btn_report = tk.Frame(sidebar_icons, bg=THEME_ACTIVITY_BAR, cursor="hand2")
         self.btn_report.pack(pady=(0, 4))
-        self.lbl_report = tk.Label(self.btn_report, text="📊", font=("Consolas", 16),
+        self.lbl_report = tk.Label(self.btn_report, text="R", font=("Consolas", 15, "bold"),
                 bg=THEME_ACTIVITY_BAR, fg="#888888")
-        self.lbl_report.pack(padx=8, pady=6)
+        self.lbl_report.pack(padx=12, pady=8)
         self.btn_report.bind("<Button-1>", lambda e: self._show_page("report"))
         self.lbl_report.bind("<Button-1>", lambda e: self._show_page("report"))
 
         # Login/Settings icon button
         self.btn_settings = tk.Frame(sidebar_icons, bg=THEME_ACTIVITY_BAR, cursor="hand2")
         self.btn_settings.pack(pady=(0, 4))
-        self.lbl_settings = tk.Label(self.btn_settings, text="👤", font=("Consolas", 16),
+        self.lbl_settings = tk.Label(self.btn_settings, text="U", font=("Consolas", 15, "bold"),
                 bg=THEME_ACTIVITY_BAR, fg="#888888")
-        self.lbl_settings.pack(padx=8, pady=6)
+        self.lbl_settings.pack(padx=12, pady=8)
         self.btn_settings.bind("<Button-1>", lambda e: self._show_page("settings"))
         self.lbl_settings.bind("<Button-1>", lambda e: self._show_page("settings"))
 
@@ -459,8 +495,25 @@ class JiraReportApp:
         # === Main Content Area (Report Page) ===
         main_content = self.page_report
 
+        hero = tk.Frame(main_content, bg=THEME_BG)
+        hero.pack(fill=tk.X, pady=(0, 16))
+        tk.Label(hero, text="Jira Report Studio",
+                font=("Consolas", 22, "bold"),
+                fg=THEME_TEXT, bg=THEME_BG).pack(anchor=tk.W)
+        tk.Label(hero, text="Compose weekly Jira reports with focused filters, comment capture, and optional AI summaries.",
+                font=("Consolas", 10),
+                fg=THEME_TEXT_SECONDARY, bg=THEME_BG).pack(anchor=tk.W, pady=(4, 0))
+
+        work_area = tk.Frame(main_content, bg=THEME_BG)
+        work_area.pack(fill=tk.BOTH, expand=True)
+        left_col = tk.Frame(work_area, bg=THEME_BG)
+        left_col.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(0, 8))
+        right_col = tk.Frame(work_area, bg=THEME_BG, width=320)
+        right_col.pack(side=tk.LEFT, fill=tk.BOTH, padx=(8, 0))
+        right_col.pack_propagate(False)
+
         # === Card: Date Range ===
-        date_card = self._create_card(main_content)
+        date_card = self._create_card(left_col)
         date_card.pack(fill=tk.X, pady=(0, 12))
 
         self._add_card_title(date_card, "Date Range", "Select reporting period")
@@ -505,7 +558,7 @@ class JiraReportApp:
         self.end_date_var.trace_add("write", lambda *_: self._update_filepath())
 
         # === Card: Filters ===
-        filters_card = self._create_card(main_content)
+        filters_card = self._create_card(left_col)
         filters_card.pack(fill=tk.X, pady=(0, 12))
 
         self._add_card_title(filters_card, "Filters", "Configure report options")
@@ -528,8 +581,58 @@ class JiraReportApp:
         ttk.Entry(col_row, textvariable=self.column_order_var,
                  style="Modern.TEntry", font=("Consolas", 11)).pack(side=tk.LEFT, padx=(8, 0), fill=tk.X, expand=True)
 
+        # === Card: Output ===
+        output_card = self._create_card(left_col)
+        output_card.pack(fill=tk.X, pady=(0, 12))
+
+        self._add_card_title(output_card, "Output", "Save report to file")
+
+        output_row = tk.Frame(output_card, bg=THEME_SURFACE)
+        output_row.pack(fill=tk.X)
+
+        self.filepath_var = tk.StringVar()
+        self.filepath_var.set(os.path.join(self.last_save_dir,
+                         f"Jira_Weekly_Report_{datetime.date.today().strftime('%Y%m%d')}.xlsx"))
+        ttk.Entry(output_row, textvariable=self.filepath_var,
+                 style="Modern.TEntry", font=("Consolas", 11)).pack(side=tk.LEFT, fill=tk.X, expand=True)
+
+        tk.Button(output_row, text="Browse", command=self.browse_file,
+                 bg=THEME_SURFACE_RAISED, fg=THEME_TEXT,
+                 activebackground=THEME_SURFACE_HOVER, relief="flat",
+                 borderwidth=1,
+                 font=("Consolas", 10), cursor="hand2", padx=10, pady=4).pack(side=tk.LEFT, padx=(8, 0))
+
+        # === Alignment Options ===
+        align_card = self._create_card(left_col)
+        align_card.pack(fill=tk.X, pady=(0, 16))
+
+        align_row = tk.Frame(align_card, bg=THEME_SURFACE)
+        align_row.pack(fill=tk.X)
+
+        self._create_section_label(align_row, "Header").pack(side=tk.LEFT)
+        self._create_combo(align_row, self.header_align_var, ["left", "center", "right"], width=8).pack(side=tk.LEFT, padx=(4, 16))
+
+        self._create_section_label(align_row, "Cell").pack(side=tk.LEFT)
+        self._create_combo(align_row, self.cell_align_var, ["left", "center", "right"], width=8).pack(side=tk.LEFT, padx=(4, 16), fill=tk.X, expand=True)
+
+        self._create_checkbox(align_row, "Key Issue Red",
+                             self.key_issue_highlight_var, color=THEME_ERROR).pack(side=tk.LEFT)
+
+        # === Card: Progress Content ===
+        progress_card = self._create_card(right_col)
+        progress_card.pack(fill=tk.X, pady=(0, 12))
+
+        self._add_card_title(progress_card, "Progress Content", "Non-AI progress source")
+
+        self.fetch_comment_var = tk.BooleanVar(value=False)
+        self._create_checkbox(progress_card, "Fetch latest comment",
+                             self.fetch_comment_var, command=self.on_fetch_comment_toggle).pack(anchor=tk.W, pady=(0, 8))
+
+        self._create_checkbox(progress_card, "Prefix timestamp",
+                             self.comment_timestamp_prefix_var, command=self.on_comment_timestamp_toggle).pack(anchor=tk.W)
+
         # === Card: AI Summary (Highlighted) ===
-        ai_card = self._create_card(main_content, highlight=True)
+        ai_card = self._create_card(right_col, highlight=True)
         ai_card.pack(fill=tk.X, pady=(0, 12))
 
         # AI card header with glow effect
@@ -574,51 +677,6 @@ class JiraReportApp:
                 relief="solid", bd=1, font=("Consolas", 10), justify=tk.CENTER).pack(side=tk.LEFT)
 
         self.ai_config_outer.pack_forget()
-
-        # Other AI-related options
-        self.fetch_comment_var = tk.BooleanVar(value=False)
-        self._create_checkbox(ai_card, "Fetch latest comment",
-                             self.fetch_comment_var, command=self.on_fetch_comment_toggle).pack(anchor=tk.W, pady=(0, 6))
-
-        self._create_checkbox(ai_card, "Prefix timestamp",
-                             self.comment_timestamp_prefix_var, command=self.on_comment_timestamp_toggle).pack(anchor=tk.W)
-
-        # === Card: Output ===
-        output_card = self._create_card(main_content)
-        output_card.pack(fill=tk.X, pady=(0, 12))
-
-        self._add_card_title(output_card, "Output", "Save report to file")
-
-        output_row = tk.Frame(output_card, bg=THEME_SURFACE)
-        output_row.pack(fill=tk.X)
-
-        self.filepath_var = tk.StringVar()
-        self.filepath_var.set(os.path.join(self.last_save_dir,
-                         f"Jira_Weekly_Report_{datetime.date.today().strftime('%Y%m%d')}.xlsx"))
-        ttk.Entry(output_row, textvariable=self.filepath_var,
-                 style="Modern.TEntry", font=("Consolas", 11)).pack(side=tk.LEFT, fill=tk.X, expand=True)
-
-        tk.Button(output_row, text="Browse", command=self.browse_file,
-                 bg=THEME_SURFACE_RAISED, fg=THEME_TEXT,
-                 activebackground=THEME_SURFACE_HOVER, relief="flat",
-                 borderwidth=1,
-                 font=("Consolas", 10), cursor="hand2", padx=10, pady=4).pack(side=tk.LEFT, padx=(8, 0))
-
-        # === Alignment Options ===
-        align_card = self._create_card(main_content)
-        align_card.pack(fill=tk.X, pady=(0, 16))
-
-        align_row = tk.Frame(align_card, bg=THEME_SURFACE)
-        align_row.pack(fill=tk.X)
-
-        self._create_section_label(align_row, "Header").pack(side=tk.LEFT)
-        self._create_combo(align_row, self.header_align_var, ["left", "center", "right"], width=8).pack(side=tk.LEFT, padx=(4, 16))
-
-        self._create_section_label(align_row, "Cell").pack(side=tk.LEFT)
-        self._create_combo(align_row, self.cell_align_var, ["left", "center", "right"], width=8).pack(side=tk.LEFT, padx=(4, 16), fill=tk.X, expand=True)
-
-        self._create_checkbox(align_row, "Key Issue Red",
-                             self.key_issue_highlight_var, color=THEME_ERROR).pack(side=tk.LEFT)
 
         # === Action Buttons (Sidebar) ===
         sidebar_actions = tk.Frame(self.sidebar, bg=THEME_ACTIVITY_BAR)
@@ -670,10 +728,10 @@ class JiraReportApp:
         self.spinner_index = 0
         self.spinner_running = False
 
-        # === Status Bar (VSCode style) ===
+        # === Status Bar ===
         self.status_bar = tk.Label(self.root, text="Ready — Sign in to continue",
                                    bd=0, relief=tk.FLAT, anchor=tk.W, padx=8,
-                                   font=("Consolas", 11), fg="#ffffff", bg=THEME_STATUS_BAR)
+                                   font=("Consolas", 10), fg=THEME_TEXT_SECONDARY, bg=THEME_STATUS_BAR)
         self.status_bar.pack(side=tk.BOTTOM, fill=tk.X)
 
     def set_quick_date(self, period):
@@ -759,11 +817,11 @@ class JiraReportApp:
         if active == "report":
             self.btn_report.configure(bg=bg_active)
             for child in self.btn_report.winfo_children():
-                child.configure(bg=bg_active, fg=fg_active)
+                child.configure(bg=bg_active, fg=THEME_PRIMARY)
         else:
             self.btn_settings.configure(bg=bg_active)
             for child in self.btn_settings.winfo_children():
-                child.configure(bg=bg_active, fg=fg_active)
+                child.configure(bg=bg_active, fg=THEME_PRIMARY)
 
     def _setup_settings_page(self):
         """Setup the Settings page with configuration options"""
@@ -878,7 +936,7 @@ class JiraReportApp:
 
         # Save button
         tk.Button(report_card, text="Save Settings", command=self._save_settings,
-                 bg=THEME_PRIMARY, fg=THEME_TEXT,
+                 bg=THEME_PRIMARY, fg=THEME_PRIMARY_TEXT,
                  activebackground=THEME_PRIMARY_HOVER, relief="flat",
                  font=("Consolas", 10, "bold"), cursor="hand2", padx=16, pady=6).pack(anchor=tk.E)
 
@@ -1204,9 +1262,9 @@ class JiraReportApp:
             self.check_cancelled()
             self.root.after(0, lambda: self.update_processing(f"Found {len(issues_assist)} assist issues", f"{len(issues_assist_normal)} normal + {len(issues_assist_wait3rd)} WAIT_3RD", 35))
 
-            closed_statuses = {"CLOSED", "RESOLVED"}
             no_comment_required_statuses = {"WAIT 3RD PARTY", "WORKING"}
             wait_blocked_statuses = {"WAIT FAE INFO", "WORKED AROUND", "WAIT OFFICIAL RELEASE"}
+            closed_statuses = {"CLOSED", "RESOLVED"}
 
             def is_in_date_range(issue):
                 """Check if issue's created time or latest comment time is within date range"""
@@ -1216,6 +1274,11 @@ class JiraReportApp:
                     return True
                 return self.user_commented_in_date_range(issue['key'], start_date, end_date)
 
+            def field_date_in_range(issue, field_name):
+                date_str = issue.get("fields", {}).get(field_name, "")
+                dt = self._parse_jira_datetime(date_str)
+                return bool(dt and start_date <= dt.date() <= end_date)
+
             def should_include_issue(issue, start_date, end_date):
                 """判断一个 issue 是否应该包含在报告中
 
@@ -1224,38 +1287,35 @@ class JiraReportApp:
                 2. WAIT FAE INFO/WORKED AROUND/WAIT OFFICIAL RELEASE：
                    - 情景1：SDE是当前用户 且 assignee非当前用户 → 直接保留
                    - 情景3：SDE非当前用户 → 当前用户在时间区间内有评论才保留
-                3. CLOSED/RESOLVED 状态：3个月内有评论才保留
+                3. CLOSED/RESOLVED：SDE是当前用户且本期关闭/解决 → 保留
                 4. 其他状态：当前用户在时间区间内有评论就保留
                 """
                 status = issue.get("fields", {}).get("status", {}).get("name", "")
+                status_key = status.upper()
                 fields = issue.get("fields", {})
-                assignee_field = fields.get("assignee", {})
-                assignee_name = assignee_field.get("name", "") or ""
+                assignee_field = fields.get("assignee")
+                sde_field = fields.get("customfield_12001")
 
-                if status in no_comment_required_statuses:
+                if status_key in no_comment_required_statuses:
                     return is_in_date_range(issue)
 
-                if status in wait_blocked_statuses:
+                if status_key in wait_blocked_statuses:
                     # 情景1：SDE是当前用户 且 assignee非当前用户 → 直接保留
                     # 情景3：SDE非当前用户 → 当前用户在时间区间内有评论才保留
-                    # 检查SDE是否是当前用户 - 通过JQL获取的来源判断
-                    # issues_assigned的JQL保证SDE是当前用户
-                    # issues_assist的JQL保证SDE不是当前用户
-                    in_assigned = any(a['key'] == issue['key'] for a in issues_assigned)
-                    if in_assigned:
-                        # SDE是当前用户（jql_normal保证），检查是否是情景1
-                        if assignee_name.lower() != self.username.split("@")[0].lower():
+                    # JQL 的 comment/currentUser 只能作为粗筛，最终以 REST 字段和评论作者为准。
+                    if self._is_current_user(sde_field):
+                        if not self._is_current_user(assignee_field):
                             # 情景1：SDE是当前用户 且 assignee非当前用户 → 直接保留
                             return True
                         # assignee是当前用户，需要当前用户在时间区间内有评论
                         return self.user_commented_in_date_range(issue['key'], start_date, end_date)
-                    else:
-                        # SDE不是当前用户（jql_assist_normal保证），是情景3
-                        # 需要当前用户在时间区间内有评论才保留
-                        return self.user_commented_in_date_range(issue['key'], start_date, end_date)
 
-                if status in closed_statuses:
-                    return self.user_commented_within_months(issue['key'], months=3)
+                    # SDE不是当前用户，是情景3；需要当前用户在时间区间内有评论才保留。
+                    return self.user_commented_in_date_range(issue['key'], start_date, end_date)
+
+                if status_key in closed_statuses and self._is_current_user(sde_field):
+                    if field_date_in_range(issue, "resolutiondate") or field_date_in_range(issue, "updated"):
+                        return True
 
                 # 其他状态：当前用户在时间区间内有评论就保留
                 return self.user_commented_in_date_range(issue['key'], start_date, end_date)
@@ -1325,7 +1385,7 @@ class JiraReportApp:
             "jql": jql,
             "startAt": start_at,
             "maxResults": max_results,
-            "fields": "summary,status,priority,created,updated,creator,key,assignee,customfield_11029,customfield_12031,customfield_10100,customfield_10102,customfield_10400,customfield_10401"
+            "fields": "summary,status,priority,created,updated,resolutiondate,creator,key,assignee,customfield_12001,customfield_11029,customfield_12031,customfield_10100,customfield_10102,customfield_10400,customfield_10401"
         }
 
         while True:
@@ -1409,20 +1469,11 @@ class JiraReportApp:
             data = response.json()
             comments = data.get("comments", [])
 
-            current_user_short = self.username.split("@")[0] if self.username else ""
-
             for comment in comments:
                 self.check_cancelled()
                 author = comment.get("author", {})
-                author_email = author.get("emailAddress", "")
-                author_short = author_email.split("@")[0] if author_email else ""
 
-                is_current_user = (current_user_short and (
-                    current_user_short == author_short or
-                    self.username == author_email
-                ))
-
-                if is_current_user:
+                if self._is_current_user(author):
                     created_str = comment.get("created", "")
                     if created_str:
                         comment_dt = self._parse_jira_datetime(created_str)
@@ -1452,21 +1503,13 @@ class JiraReportApp:
             data = response.json()
             comments = data.get("comments", [])
 
-            current_user_short = self.username.split("@")[0] if self.username else ""
             since_date = datetime.date.today() - timedelta(days=months * 30)
 
             for comment in comments:
                 self.check_cancelled()
                 author = comment.get("author", {})
-                author_email = author.get("emailAddress", "")
-                author_short = author_email.split("@")[0] if author_email else ""
 
-                is_current_user = (current_user_short and (
-                    current_user_short == author_short or
-                    self.username == author_email
-                ))
-
-                if is_current_user:
+                if self._is_current_user(author):
                     created_str = comment.get("created", "")
                     if created_str:
                         comment_dt = self._parse_jira_datetime(created_str)
@@ -1495,23 +1538,14 @@ class JiraReportApp:
             data = response.json()
             comments = data.get("comments", [])
 
-            current_user_short = self.username.split("@")[0] if self.username else ""
-
             latest_comment = None
             latest_dt = None
 
             for comment in comments:
                 self.check_cancelled()
                 author = comment.get("author", {})
-                author_email = author.get("emailAddress", "")
-                author_short = author_email.split("@")[0] if author_email else ""
 
-                is_current_user = (current_user_short and (
-                    current_user_short == author_short or
-                    self.username == author_email
-                ))
-
-                if is_current_user:
+                if self._is_current_user(author):
                     created_str = comment.get("created", "")
                     if created_str:
                         comment_dt = self._parse_jira_datetime(created_str)
