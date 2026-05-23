@@ -21,24 +21,288 @@ from openpyxl.utils import get_column_letter
 from openpyxl.worksheet.datavalidation import DataValidation
 
 
-# MiniMax-inspired dark product theme
-THEME_BG = "#050505"
-THEME_SURFACE = "#101010"
-THEME_SURFACE_RAISED = "#181818"
-THEME_SURFACE_HOVER = "#242424"
-THEME_BORDER = "#2f2f2f"
-THEME_PRIMARY = "#c7ff3d"
-THEME_PRIMARY_HOVER = "#d8ff69"
-THEME_PRIMARY_GLOW = "#8cff00"
-THEME_PRIMARY_TEXT = "#070707"
-THEME_TEXT = "#f4f4f4"
-THEME_TEXT_SECONDARY = "#b7b7b7"
-THEME_TEXT_MUTED = "#747474"
-THEME_SUCCESS = "#4ec9b0"
-THEME_ERROR = "#ff5c5c"
-THEME_WARNING = "#f2c94c"
-THEME_ACTIVITY_BAR = "#0b0b0b"
-THEME_STATUS_BAR = "#101010"
+# Product theme presets
+THEME_PRESETS = {
+    "Geek": {
+        "bg": "#050505",
+        "surface": "#101010",
+        "surface_raised": "#181818",
+        "surface_hover": "#242424",
+        "border": "#2f2f2f",
+        "primary": "#c7ff3d",
+        "primary_hover": "#d8ff69",
+        "primary_glow": "#8cff00",
+        "primary_text": "#070707",
+        "text": "#f4f4f4",
+        "text_secondary": "#b7b7b7",
+        "text_muted": "#747474",
+        "success": "#4ec9b0",
+        "error": "#ff5c5c",
+        "warning": "#f2c94c",
+        "activity_bar": "#0b0b0b",
+        "status_bar": "#101010",
+    },
+    "Alpine": {
+        "bg": "#eef6f3",
+        "surface": "#ffffff",
+        "surface_raised": "#f4faf7",
+        "surface_hover": "#e4f1ec",
+        "border": "#9fb8ae",
+        "primary": "#2f7d68",
+        "primary_hover": "#256854",
+        "primary_glow": "#64b99f",
+        "primary_text": "#ffffff",
+        "text": "#1c2f2a",
+        "text_secondary": "#2f5148",
+        "text_muted": "#5f7870",
+        "success": "#2f8f71",
+        "error": "#c94f4f",
+        "warning": "#b57918",
+        "activity_bar": "#d8e8e2",
+        "status_bar": "#ffffff",
+    },
+    "Trendy": {
+        "bg": "#f7f4fb",
+        "surface": "#ffffff",
+        "surface_raised": "#f4edf8",
+        "surface_hover": "#eadcf2",
+        "border": "#c5aad5",
+        "primary": "#d94f8f",
+        "primary_hover": "#c53f7c",
+        "primary_glow": "#ff86ba",
+        "primary_text": "#ffffff",
+        "text": "#2f2633",
+        "text_secondary": "#55425e",
+        "text_muted": "#75607e",
+        "success": "#2fa87a",
+        "error": "#d94f4f",
+        "warning": "#c98220",
+        "activity_bar": "#ece0f2",
+        "status_bar": "#ffffff",
+    },
+}
+
+THEME_BG = ""
+THEME_SURFACE = ""
+THEME_SURFACE_RAISED = ""
+THEME_SURFACE_HOVER = ""
+THEME_BORDER = ""
+THEME_PRIMARY = ""
+THEME_PRIMARY_HOVER = ""
+THEME_PRIMARY_GLOW = ""
+THEME_PRIMARY_TEXT = ""
+THEME_TEXT = ""
+THEME_TEXT_SECONDARY = ""
+THEME_TEXT_MUTED = ""
+THEME_SUCCESS = ""
+THEME_ERROR = ""
+THEME_WARNING = ""
+THEME_ACTIVITY_BAR = ""
+THEME_STATUS_BAR = ""
+
+
+def apply_theme(theme_name):
+    palette = THEME_PRESETS.get(theme_name, THEME_PRESETS["Geek"])
+    globals().update({
+        "THEME_BG": palette["bg"],
+        "THEME_SURFACE": palette["surface"],
+        "THEME_SURFACE_RAISED": palette["surface_raised"],
+        "THEME_SURFACE_HOVER": palette["surface_hover"],
+        "THEME_BORDER": palette["border"],
+        "THEME_PRIMARY": palette["primary"],
+        "THEME_PRIMARY_HOVER": palette["primary_hover"],
+        "THEME_PRIMARY_GLOW": palette["primary_glow"],
+        "THEME_PRIMARY_TEXT": palette["primary_text"],
+        "THEME_TEXT": palette["text"],
+        "THEME_TEXT_SECONDARY": palette["text_secondary"],
+        "THEME_TEXT_MUTED": palette["text_muted"],
+        "THEME_SUCCESS": palette["success"],
+        "THEME_ERROR": palette["error"],
+        "THEME_WARNING": palette["warning"],
+        "THEME_ACTIVITY_BAR": palette["activity_bar"],
+        "THEME_STATUS_BAR": palette["status_bar"],
+    })
+
+
+apply_theme("Geek")
+
+LANGUAGE_OPTIONS = {
+    "中文": "zh",
+    "English": "en",
+}
+
+LANGUAGE_LABELS = {value: key for key, value in LANGUAGE_OPTIONS.items()}
+
+I18N = {
+    "zh": {
+        "settings": "设置",
+        "ui_preferences": "界面偏好",
+        "ui_preferences_subtitle": "选择语言和适合不同用户偏好的颜色风格",
+        "language": "语言:",
+        "color_style": "颜色风格:",
+        "jira_login": "Jira 登录",
+        "username": "账号:",
+        "password": "密码:",
+        "remember_credentials": "记住账号密码",
+        "login": "登录",
+        "logout": "退出",
+        "not_connected": "未连接",
+        "connected": "已连接: {username}",
+        "ai_settings": "AI 设置",
+        "model": "模型:",
+        "default_report_settings": "默认日报设置",
+        "columns": "列顺序:",
+        "column_order_hint": "1=问题单号, 2=客户, 3=项目/机型, 4=状态, 5=问题描述, 6=关键问题, 7=当前进展。可按逗号调整顺序。",
+        "header_align": "表头对齐:",
+        "cell_align": "单元格对齐:",
+        "highlight_key_issues": "关键问题标红",
+        "save_settings": "保存设置",
+        "save_success_title": "保存成功",
+        "save_success": "设置已保存。",
+        "save_failed_title": "保存失败",
+        "save_failed": "设置保存失败:\n{error}",
+        "report_title": "Jira 日报工作台",
+        "report_subtitle": "按时间、状态和评论生成 Jira 日报，可选 AI 总结。",
+        "date_range": "日期范围",
+        "date_range_subtitle": "选择日报统计周期",
+        "this_week": "本周",
+        "last_week": "上周",
+        "this_month": "本月",
+        "filters": "筛选条件",
+        "filters_subtitle": "配置日报生成选项",
+        "status": "状态",
+        "output": "输出文件",
+        "output_subtitle": "保存日报到本地",
+        "browse": "浏览",
+        "header": "表头",
+        "cell": "单元格",
+        "key_issue_red": "关键问题标红",
+        "progress_content": "进展内容",
+        "progress_content_subtitle": "非 AI 的进展来源",
+        "fetch_latest_comment": "获取最新评论",
+        "prefix_timestamp": "添加时间前缀",
+        "ai_summary": "AI 总结",
+        "powered_by_deepseek": "DeepSeek 驱动",
+        "enable_ai_summary": "启用 AI 总结",
+        "batch_mode": "批量模式",
+        "batch_size": "批量",
+        "ready_sign_in": "就绪 - 请先登录 Jira",
+        "login_required_status": "请先在设置页面登录 Jira 后再生成日报。",
+        "login_required_title": "需要登录",
+        "login_required_message": "当前还没有登录 Jira。\n请先输入账号密码并点击“登录”，登录成功后再生成日报。",
+        "login_missing_title": "登录提示",
+        "login_missing_message": "请输入 Jira 账号和密码。",
+        "logging_in": "正在登录...",
+        "login_failed_title": "登录失败",
+        "login_failed": "登录失败",
+        "connection_error_title": "连接错误",
+        "connection_error": "无法连接 Jira 服务器:\n{error}",
+        "logged_in": "已登录: {username}",
+        "logged_out": "已退出登录",
+        "date_error_title": "日期错误",
+        "invalid_date": "日期格式无效，请使用 YYYY-MM-DD。",
+        "end_date_before_start": "结束日期必须晚于或等于开始日期。",
+        "save_path_title": "保存路径",
+        "save_path_required": "请选择日报保存路径。",
+        "done": "完成",
+        "report_saved": "日报已保存",
+        "report_saved_status": "日报已保存: {filepath}",
+        "generated_title": "生成完成",
+        "generated_message": "日报生成成功。\n\n已导出 {count} 个问题到:\n{filepath}",
+        "cancelled_title": "已取消",
+        "cancelled_status": "已取消",
+        "cancelled_message": "日报生成已取消。",
+        "generation_failed_title": "生成失败",
+        "generation_failed": "生成失败:\n{error}",
+        "starting": "开始生成...",
+        "cancelling": "正在取消...",
+        "cancel_detail": "等待当前请求结束...",
+    },
+    "en": {
+        "settings": "Settings",
+        "ui_preferences": "UI Preferences",
+        "ui_preferences_subtitle": "Choose language and a color style for different users",
+        "language": "Language:",
+        "color_style": "Color Style:",
+        "jira_login": "Jira Connection",
+        "username": "Username:",
+        "password": "Password:",
+        "remember_credentials": "Remember credentials",
+        "login": "Login",
+        "logout": "Logout",
+        "not_connected": "Not connected",
+        "connected": "Connected: {username}",
+        "ai_settings": "AI Settings",
+        "model": "Model:",
+        "default_report_settings": "Default Report Settings",
+        "columns": "Columns:",
+        "column_order_hint": "1=Issue Key, 2=Customer, 3=Project/Model, 4=Status, 5=Description, 6=Key Issue, 7=Progress. Reorder with comma-separated numbers.",
+        "header_align": "Header Align:",
+        "cell_align": "Cell Align:",
+        "highlight_key_issues": "Highlight key issues in red",
+        "save_settings": "Save Settings",
+        "save_success_title": "Success",
+        "save_success": "Settings saved successfully.",
+        "save_failed_title": "Error",
+        "save_failed": "Failed to save settings:\n{error}",
+        "report_title": "Jira Report Studio",
+        "report_subtitle": "Compose Jira reports with focused filters, comment capture, and optional AI summaries.",
+        "date_range": "Date Range",
+        "date_range_subtitle": "Select reporting period",
+        "this_week": "This Week",
+        "last_week": "Last Week",
+        "this_month": "This Month",
+        "filters": "Filters",
+        "filters_subtitle": "Configure report options",
+        "status": "Status",
+        "output": "Output",
+        "output_subtitle": "Save report to file",
+        "browse": "Browse",
+        "header": "Header",
+        "cell": "Cell",
+        "key_issue_red": "Key Issue Red",
+        "progress_content": "Progress Content",
+        "progress_content_subtitle": "Non-AI progress source",
+        "fetch_latest_comment": "Fetch latest comment",
+        "prefix_timestamp": "Prefix timestamp",
+        "ai_summary": "AI Summary",
+        "powered_by_deepseek": "Powered by DeepSeek",
+        "enable_ai_summary": "Enable AI-powered summary",
+        "batch_mode": "Batch Mode",
+        "batch_size": "Size",
+        "ready_sign_in": "Ready - Sign in to continue",
+        "login_required_status": "Please sign in on the Settings page before generating a report.",
+        "login_required_title": "Login Required",
+        "login_required_message": "You are not signed in to Jira.\nEnter your credentials and click Login, then generate the report.",
+        "login_missing_title": "Login",
+        "login_missing_message": "Please enter username and password.",
+        "logging_in": "Logging in...",
+        "login_failed_title": "Login Failed",
+        "login_failed": "Login failed",
+        "connection_error_title": "Connection Error",
+        "connection_error": "Cannot connect to Jira server:\n{error}",
+        "logged_in": "Logged in as {username}",
+        "logged_out": "Logged out",
+        "date_error_title": "Date Error",
+        "invalid_date": "Invalid date format. Use YYYY-MM-DD.",
+        "end_date_before_start": "End date must be after or equal to start date.",
+        "save_path_title": "Save Path",
+        "save_path_required": "Please select a save path.",
+        "done": "Done",
+        "report_saved": "Report saved",
+        "report_saved_status": "Report saved: {filepath}",
+        "generated_title": "Success",
+        "generated_message": "Report generated successfully.\n\n{count} issues exported to:\n{filepath}",
+        "cancelled_title": "Cancelled",
+        "cancelled_status": "Cancelled",
+        "cancelled_message": "Report generation was cancelled.",
+        "generation_failed_title": "Error",
+        "generation_failed": "Failed:\n{error}",
+        "starting": "Starting...",
+        "cancelling": "Cancelling...",
+        "cancel_detail": "Waiting for current request to finish...",
+    },
+}
 
 # Backward compatibility
 MINECRAFT_BG = THEME_BG
@@ -104,13 +368,27 @@ class JiraReportApp:
         # Shared settings variables (created once, used by both Report and Settings pages)
         self.ai_model_var = tk.StringVar(value="deepseek-chat")
         self.api_key_var = tk.StringVar()
+        self.username_var = tk.StringVar(value="")
+        self.password_var = tk.StringVar(value="")
+        self.remember_var = tk.BooleanVar(value=False)
         self.column_order_var = tk.StringVar(value="1,2,3,4,5,6,7")
         self.key_issue_highlight_var = tk.BooleanVar(value=True)
         self.comment_timestamp_prefix_var = tk.BooleanVar(value=False)
         self.header_align_var = tk.StringVar(value="left")
         self.cell_align_var = tk.StringVar(value="center")
+        self.theme_var = tk.StringVar(value="Geek")
+        self.language_var = tk.StringVar(value="中文")
+        self.fetch_comment_var = tk.BooleanVar(value=False)
+        self.use_ai_summary_var = tk.BooleanVar(value=False)
+        self.batch_mode_var = tk.BooleanVar(value=False)
+        self.batch_size_var = tk.IntVar(value=10)
+        self.language_code = "zh"
 
         self.load_credentials()
+        self.theme_var.set(self.saved_theme)
+        self.language_code = self.saved_language
+        self.language_var.set(LANGUAGE_LABELS.get(self.language_code, "中文"))
+        apply_theme(self.saved_theme)
         self.setup_ui()
 
         # Apply saved values AFTER setup_ui creates the vars
@@ -137,6 +415,8 @@ class JiraReportApp:
         self.saved_column_order = "1,2,3,4,5,6,7"
         self.saved_key_issue_highlight = True
         self.saved_comment_timestamp_prefix = False
+        self.saved_theme = "Geek"
+        self.saved_language = "zh"
         if os.path.exists(self.config_file):
             try:
                 with open(self.config_file, "r") as f:
@@ -148,6 +428,12 @@ class JiraReportApp:
                     self.saved_column_order = self._normalize_column_order(data.get("column_order", "1,2,3,4,5,6,7"))
                     self.saved_key_issue_highlight = bool(data.get("key_issue_highlight", True))
                     self.saved_comment_timestamp_prefix = bool(data.get("comment_timestamp_prefix", False))
+                    self.saved_theme = data.get("theme", "Geek")
+                    if self.saved_theme not in THEME_PRESETS:
+                        self.saved_theme = "Geek"
+                    self.saved_language = data.get("language", "zh")
+                    if self.saved_language not in I18N:
+                        self.saved_language = "zh"
                     self.last_save_dir = data.get("last_save_dir", os.path.expanduser("~"))
             except:
                 pass
@@ -163,10 +449,16 @@ class JiraReportApp:
                     "column_order": self._normalize_column_order(self.column_order_var.get()),
                     "key_issue_highlight": bool(self.key_issue_highlight_var.get()),
                     "comment_timestamp_prefix": bool(self.comment_timestamp_prefix_var.get()),
+                    "theme": self.theme_var.get(),
+                    "language": self.language_code,
                     "last_save_dir": self.last_save_dir
                 }, f)
         except:
             pass
+
+    def t(self, key, **kwargs):
+        text = I18N.get(self.language_code, I18N["zh"]).get(key, I18N["en"].get(key, key))
+        return text.format(**kwargs) if kwargs else text
 
     def save_ui_preferences(self):
         """Persist non-login UI preferences without touching credentials."""
@@ -179,6 +471,8 @@ class JiraReportApp:
             data["column_order"] = self._normalize_column_order(self.column_order_var.get())
             data["key_issue_highlight"] = bool(self.key_issue_highlight_var.get())
             data["comment_timestamp_prefix"] = bool(self.comment_timestamp_prefix_var.get())
+            data["theme"] = self.theme_var.get()
+            data["language"] = self.language_code
             data["last_save_dir"] = self.last_save_dir
             with open(self.config_file, "w") as f:
                 json.dump(data, f)
@@ -407,10 +701,20 @@ class JiraReportApp:
         fg = color if color else THEME_TEXT
         cb = tk.Checkbutton(parent, text=text, variable=variable,
                           bg=THEME_SURFACE, fg=fg,
-                          selectcolor=THEME_PRIMARY, activebackground=THEME_SURFACE,
+                          selectcolor=THEME_SURFACE_RAISED, activebackground=THEME_SURFACE,
                           activeforeground=fg, font=("Consolas", 11),
-                          cursor="hand2", command=command)
+                          cursor="hand2", command=command,
+                          relief="flat", bd=0, highlightthickness=1,
+                          highlightbackground=THEME_BORDER,
+                          highlightcolor=THEME_PRIMARY)
         return cb
+
+    def _create_hint_label(self, parent, text, surface=None):
+        """Create muted helper text with enough contrast across themes."""
+        bg = surface if surface else THEME_SURFACE
+        return tk.Label(parent, text=text, font=("Consolas", 9),
+                        fg=THEME_TEXT_SECONDARY, bg=bg,
+                        justify=tk.LEFT, anchor=tk.W, wraplength=720)
 
     def _create_primary_button(self, parent, text, command, width=None):
         """Create a primary CTA button with glow effect"""
@@ -497,10 +801,10 @@ class JiraReportApp:
 
         hero = tk.Frame(main_content, bg=THEME_BG)
         hero.pack(fill=tk.X, pady=(0, 16))
-        tk.Label(hero, text="Jira Report Studio",
+        tk.Label(hero, text=self.t("report_title"),
                 font=("Consolas", 22, "bold"),
                 fg=THEME_TEXT, bg=THEME_BG).pack(anchor=tk.W)
-        tk.Label(hero, text="Compose weekly Jira reports with focused filters, comment capture, and optional AI summaries.",
+        tk.Label(hero, text=self.t("report_subtitle"),
                 font=("Consolas", 10),
                 fg=THEME_TEXT_SECONDARY, bg=THEME_BG).pack(anchor=tk.W, pady=(4, 0))
 
@@ -516,7 +820,7 @@ class JiraReportApp:
         date_card = self._create_card(left_col)
         date_card.pack(fill=tk.X, pady=(0, 12))
 
-        self._add_card_title(date_card, "Date Range", "Select reporting period")
+        self._add_card_title(date_card, self.t("date_range"), self.t("date_range_subtitle"))
 
         date_row = tk.Frame(date_card, bg=THEME_SURFACE)
         date_row.pack(fill=tk.X)
@@ -537,9 +841,9 @@ class JiraReportApp:
         quick_row = tk.Frame(date_card, bg=THEME_SURFACE)
         quick_row.pack(fill=tk.X, pady=(10, 0))
 
-        for txt, cmd in [("This Week", lambda: self.set_quick_date("week")),
-                        ("Last Week", lambda: self.set_quick_date("last_week")),
-                        ("This Month", lambda: self.set_quick_date("month"))]:
+        for txt, cmd in [(self.t("this_week"), lambda: self.set_quick_date("week")),
+                        (self.t("last_week"), lambda: self.set_quick_date("last_week")),
+                        (self.t("this_month"), lambda: self.set_quick_date("month"))]:
             btn = tk.Button(quick_row, text=txt, command=cmd,
                            bg=THEME_SURFACE_RAISED, fg=THEME_TEXT_SECONDARY,
                            activebackground=THEME_SURFACE_HOVER, activeforeground=THEME_TEXT,
@@ -561,13 +865,13 @@ class JiraReportApp:
         filters_card = self._create_card(left_col)
         filters_card.pack(fill=tk.X, pady=(0, 12))
 
-        self._add_card_title(filters_card, "Filters", "Configure report options")
+        self._add_card_title(filters_card, self.t("filters"), self.t("filters_subtitle"))
 
         # Status
         status_row = tk.Frame(filters_card, bg=THEME_SURFACE)
         status_row.pack(fill=tk.X, pady=(0, 10))
 
-        self._create_section_label(status_row, "Status").pack(side=tk.LEFT)
+        self._create_section_label(status_row, self.t("status")).pack(side=tk.LEFT)
         self.status_filter_var = tk.StringVar(value="ALL")
         self._create_combo(status_row, self.status_filter_var,
                            ["ALL", "WAIT FAE INFO", "WORKED AROUND", "WORKING",
@@ -577,15 +881,16 @@ class JiraReportApp:
         col_row = tk.Frame(filters_card, bg=THEME_SURFACE)
         col_row.pack(fill=tk.X)
 
-        self._create_section_label(col_row, "Columns").pack(side=tk.LEFT)
+        self._create_section_label(col_row, self.t("columns")).pack(side=tk.LEFT)
         ttk.Entry(col_row, textvariable=self.column_order_var,
                  style="Modern.TEntry", font=("Consolas", 11)).pack(side=tk.LEFT, padx=(8, 0), fill=tk.X, expand=True)
+        self._create_hint_label(filters_card, self.t("column_order_hint")).pack(fill=tk.X, pady=(6, 0))
 
         # === Card: Output ===
         output_card = self._create_card(left_col)
         output_card.pack(fill=tk.X, pady=(0, 12))
 
-        self._add_card_title(output_card, "Output", "Save report to file")
+        self._add_card_title(output_card, self.t("output"), self.t("output_subtitle"))
 
         output_row = tk.Frame(output_card, bg=THEME_SURFACE)
         output_row.pack(fill=tk.X)
@@ -596,7 +901,7 @@ class JiraReportApp:
         ttk.Entry(output_row, textvariable=self.filepath_var,
                  style="Modern.TEntry", font=("Consolas", 11)).pack(side=tk.LEFT, fill=tk.X, expand=True)
 
-        tk.Button(output_row, text="Browse", command=self.browse_file,
+        tk.Button(output_row, text=self.t("browse"), command=self.browse_file,
                  bg=THEME_SURFACE_RAISED, fg=THEME_TEXT,
                  activebackground=THEME_SURFACE_HOVER, relief="flat",
                  borderwidth=1,
@@ -609,26 +914,25 @@ class JiraReportApp:
         align_row = tk.Frame(align_card, bg=THEME_SURFACE)
         align_row.pack(fill=tk.X)
 
-        self._create_section_label(align_row, "Header").pack(side=tk.LEFT)
+        self._create_section_label(align_row, self.t("header")).pack(side=tk.LEFT)
         self._create_combo(align_row, self.header_align_var, ["left", "center", "right"], width=8).pack(side=tk.LEFT, padx=(4, 16))
 
-        self._create_section_label(align_row, "Cell").pack(side=tk.LEFT)
+        self._create_section_label(align_row, self.t("cell")).pack(side=tk.LEFT)
         self._create_combo(align_row, self.cell_align_var, ["left", "center", "right"], width=8).pack(side=tk.LEFT, padx=(4, 16), fill=tk.X, expand=True)
 
-        self._create_checkbox(align_row, "Key Issue Red",
-                             self.key_issue_highlight_var, color=THEME_ERROR).pack(side=tk.LEFT)
+        self._create_checkbox(align_row, self.t("key_issue_red"),
+                             self.key_issue_highlight_var).pack(side=tk.LEFT)
 
         # === Card: Progress Content ===
         progress_card = self._create_card(right_col)
         progress_card.pack(fill=tk.X, pady=(0, 12))
 
-        self._add_card_title(progress_card, "Progress Content", "Non-AI progress source")
+        self._add_card_title(progress_card, self.t("progress_content"), self.t("progress_content_subtitle"))
 
-        self.fetch_comment_var = tk.BooleanVar(value=False)
-        self._create_checkbox(progress_card, "Fetch latest comment",
+        self._create_checkbox(progress_card, self.t("fetch_latest_comment"),
                              self.fetch_comment_var, command=self.on_fetch_comment_toggle).pack(anchor=tk.W, pady=(0, 8))
 
-        self._create_checkbox(progress_card, "Prefix timestamp",
+        self._create_checkbox(progress_card, self.t("prefix_timestamp"),
                              self.comment_timestamp_prefix_var, command=self.on_comment_timestamp_toggle).pack(anchor=tk.W)
 
         # === Card: AI Summary (Highlighted) ===
@@ -639,14 +943,13 @@ class JiraReportApp:
         ai_header = tk.Frame(ai_card, bg=THEME_SURFACE)
         ai_header.pack(fill=tk.X, pady=(0, 12))
 
-        tk.Label(ai_header, text="AI Summary", font=("Consolas", 13, "bold"),
+        tk.Label(ai_header, text=self.t("ai_summary"), font=("Consolas", 13, "bold"),
                 fg=THEME_PRIMARY, bg=THEME_SURFACE).pack(side=tk.LEFT)
-        tk.Label(ai_header, text="Powered by DeepSeek", font=("Consolas", 9),
+        tk.Label(ai_header, text=self.t("powered_by_deepseek"), font=("Consolas", 9),
                 fg=THEME_TEXT_MUTED, bg=THEME_SURFACE).pack(side=tk.LEFT, padx=(8, 0), pady=(2, 0))
 
         # AI options
-        self.use_ai_summary_var = tk.BooleanVar(value=False)
-        self._create_checkbox(ai_card, "Enable AI-powered summary",
+        self._create_checkbox(ai_card, self.t("enable_ai_summary"),
                              self.use_ai_summary_var, command=self.on_ai_summary_toggle,
                              color=THEME_PRIMARY).pack(anchor=tk.W, pady=(0, 8))
 
@@ -657,7 +960,7 @@ class JiraReportApp:
         model_row = tk.Frame(self.ai_config_outer, bg=THEME_SURFACE_RAISED)
         model_row.pack(fill=tk.X, pady=(0, 6))
 
-        self._create_section_label(model_row, "Model").pack(side=tk.LEFT)
+        self._create_section_label(model_row, self.t("model")).pack(side=tk.LEFT)
         self._create_combo(model_row, self.ai_model_var,
                            ["deepseek-chat", "deepseek-coder", "deepseek-v4-flash", "deepseek-v4-pro"],
                            width=18).pack(side=tk.LEFT, padx=(8, 0), fill=tk.X, expand=True)
@@ -665,13 +968,11 @@ class JiraReportApp:
         batch_row = tk.Frame(self.ai_config_outer, bg=THEME_SURFACE_RAISED)
         batch_row.pack(fill=tk.X)
 
-        self.batch_mode_var = tk.BooleanVar(value=False)
-        self._create_checkbox(batch_row, "Batch Mode", self.batch_mode_var,
+        self._create_checkbox(batch_row, self.t("batch_mode"), self.batch_mode_var,
                              command=self.on_batch_mode_toggle).pack(side=tk.LEFT)
 
-        tk.Label(batch_row, text="Size", font=("Consolas", 10),
+        tk.Label(batch_row, text=self.t("batch_size"), font=("Consolas", 10),
                 fg=THEME_TEXT_SECONDARY, bg=THEME_SURFACE_RAISED).pack(side=tk.LEFT, padx=(12, 4))
-        self.batch_size_var = tk.IntVar(value=10)
         tk.Entry(batch_row, textvariable=self.batch_size_var, width=4,
                 bg=THEME_SURFACE, fg=THEME_TEXT, insertbackground=THEME_TEXT,
                 relief="solid", bd=1, font=("Consolas", 10), justify=tk.CENTER).pack(side=tk.LEFT)
@@ -729,10 +1030,37 @@ class JiraReportApp:
         self.spinner_running = False
 
         # === Status Bar ===
-        self.status_bar = tk.Label(self.root, text="Ready — Sign in to continue",
+        self.status_bar = tk.Label(self.root, text=self.t("ready_sign_in"),
                                    bd=0, relief=tk.FLAT, anchor=tk.W, padx=8,
                                    font=("Consolas", 10), fg=THEME_TEXT_SECONDARY, bg=THEME_STATUS_BAR)
         self.status_bar.pack(side=tk.BOTTOM, fill=tk.X)
+
+    def rebuild_ui(self, target_page=None):
+        """Recreate Tk widgets so theme changes apply consistently."""
+        if target_page is None:
+            target_page = self.current_page.get() if hasattr(self, "current_page") else "settings"
+        for child in self.root.winfo_children():
+            child.destroy()
+        self.setup_ui()
+        self._restore_runtime_ui_state()
+        self._show_page(target_page)
+
+    def _restore_runtime_ui_state(self):
+        if self.logged_in:
+            self.login_status_sidebar.config(text="●", fg=THEME_SUCCESS)
+            self.login_status_label.config(text=self.t("connected", username=self.username), fg=THEME_SUCCESS)
+            self.login_btn.config(state=tk.DISABLED)
+            self.logout_btn.config(state=tk.NORMAL)
+            self.generate_btn.config(state=tk.NORMAL)
+        else:
+            self.login_status_sidebar.config(text="●", fg=THEME_ERROR)
+            self.login_status_label.config(text=self.t("not_connected"), fg=THEME_ERROR)
+            self.login_btn.config(state=tk.NORMAL)
+            self.logout_btn.config(state=tk.DISABLED)
+            self.generate_btn.config(state=tk.DISABLED)
+        self.on_ai_summary_toggle()
+        self.on_fetch_comment_toggle()
+        self._update_filepath()
 
     def set_quick_date(self, period):
         today = datetime.date.today()
@@ -826,54 +1154,74 @@ class JiraReportApp:
     def _setup_settings_page(self):
         """Setup the Settings page with configuration options"""
         # Title
-        tk.Label(self.page_settings, text="Settings",
+        tk.Label(self.page_settings, text=self.t("settings"),
                 font=("Consolas", 18, "bold"),
                 fg=THEME_TEXT, bg=THEME_BG).pack(anchor=tk.W, pady=(0, 16))
+
+        # === UI Theme Card ===
+        theme_card = self._create_card(self.page_settings)
+        theme_card.pack(fill=tk.X, pady=(0, 12))
+
+        self._add_card_title(theme_card, self.t("ui_preferences"), self.t("ui_preferences_subtitle"))
+
+        row = tk.Frame(theme_card, bg=THEME_SURFACE)
+        row.pack(fill=tk.X, pady=(0, 8))
+        tk.Label(row, text=self.t("language"), font=("Consolas", 10),
+                fg=THEME_TEXT_SECONDARY, bg=THEME_SURFACE).pack(side=tk.LEFT)
+        language_combo = ttk.Combobox(row, textvariable=self.language_var, width=18, state="readonly",
+                    style="Modern.TCombobox", font=("Consolas", 10),
+                    values=["中文", "English"])
+        language_combo.pack(side=tk.LEFT, padx=(8, 0), fill=tk.X, expand=True)
+        language_combo.bind("<<ComboboxSelected>>", self.on_language_change)
+
+        row = tk.Frame(theme_card, bg=THEME_SURFACE)
+        row.pack(fill=tk.X)
+        tk.Label(row, text=self.t("color_style"), font=("Consolas", 10),
+                fg=THEME_TEXT_SECONDARY, bg=THEME_SURFACE).pack(side=tk.LEFT)
+        theme_combo = ttk.Combobox(row, textvariable=self.theme_var, width=18, state="readonly",
+                    style="Modern.TCombobox", font=("Consolas", 10),
+                    values=["Alpine", "Trendy", "Geek"])
+        theme_combo.pack(side=tk.LEFT, padx=(8, 0), fill=tk.X, expand=True)
+        theme_combo.bind("<<ComboboxSelected>>", self.on_theme_change)
 
         # === Jira Connection Card ===
         conn_card = self._create_card(self.page_settings)
         conn_card.pack(fill=tk.X, pady=(0, 12))
 
-        self._add_card_title(conn_card, "Jira Connection")
+        self._add_card_title(conn_card, self.t("jira_login"))
 
         # Username
         row = tk.Frame(conn_card, bg=THEME_SURFACE)
         row.pack(fill=tk.X, pady=(0, 8))
-        tk.Label(row, text="Username:", font=("Consolas", 10),
+        tk.Label(row, text=self.t("username"), font=("Consolas", 10),
                 fg=THEME_TEXT_SECONDARY, bg=THEME_SURFACE).pack(side=tk.LEFT)
-        self.username_var = tk.StringVar(value="")
         ttk.Entry(row, textvariable=self.username_var,
                  style="Modern.TEntry", font=("Consolas", 10)).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(8, 0))
 
         # Password
         row = tk.Frame(conn_card, bg=THEME_SURFACE)
         row.pack(fill=tk.X, pady=(0, 8))
-        tk.Label(row, text="Password:", font=("Consolas", 10),
+        tk.Label(row, text=self.t("password"), font=("Consolas", 10),
                 fg=THEME_TEXT_SECONDARY, bg=THEME_SURFACE).pack(side=tk.LEFT)
-        self.password_var = tk.StringVar(value="")
         self.password_entry = ttk.Entry(row, textvariable=self.password_var, show="*",
                                         style="Modern.TEntry", font=("Consolas", 10))
         self.password_entry.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(8, 0))
 
         # Remember checkbox
-        self.remember_var = tk.BooleanVar(value=False)
-        tk.Checkbutton(conn_card, text="Remember credentials",
-                      variable=self.remember_var,
-                      bg=THEME_SURFACE, fg=THEME_TEXT_SECONDARY,
-                      selectcolor=THEME_PRIMARY, activebackground=THEME_SURFACE,
-                      font=("Consolas", 9), cursor="hand2").pack(anchor=tk.W, pady=(0, 8))
+        self._create_checkbox(conn_card, self.t("remember_credentials"),
+                              self.remember_var).pack(anchor=tk.W, pady=(0, 8))
 
         # Login buttons
         btn_row = tk.Frame(conn_card, bg=THEME_SURFACE)
         btn_row.pack(fill=tk.X)
-        self.login_btn = ttk.Button(btn_row, text="Login", command=self.login,
+        self.login_btn = ttk.Button(btn_row, text=self.t("login"), command=self.login,
                                    width=10, style="Modern.TButton")
         self.login_btn.pack(side=tk.LEFT)
-        self.logout_btn = ttk.Button(btn_row, text="Logout", command=self.logout,
+        self.logout_btn = ttk.Button(btn_row, text=self.t("logout"), command=self.logout,
                                     state=tk.DISABLED, width=10, style="Secondary.TButton")
         self.logout_btn.pack(side=tk.LEFT, padx=(8, 0))
 
-        self.login_status_label = tk.Label(conn_card, text="Not connected",
+        self.login_status_label = tk.Label(conn_card, text=self.t("not_connected"),
                                           font=("Consolas", 9),
                                           fg=THEME_ERROR, bg=THEME_SURFACE)
         self.login_status_label.pack(anchor=tk.W, pady=(8, 0))
@@ -882,7 +1230,7 @@ class JiraReportApp:
         ai_card = self._create_card(self.page_settings)
         ai_card.pack(fill=tk.X, pady=(0, 12))
 
-        self._add_card_title(ai_card, "AI Settings")
+        self._add_card_title(ai_card, self.t("ai_settings"))
 
         row = tk.Frame(ai_card, bg=THEME_SURFACE)
         row.pack(fill=tk.X, pady=(0, 8))
@@ -893,7 +1241,7 @@ class JiraReportApp:
 
         row = tk.Frame(ai_card, bg=THEME_SURFACE)
         row.pack(fill=tk.X, pady=(0, 8))
-        tk.Label(row, text="Model:", font=("Consolas", 10),
+        tk.Label(row, text=self.t("model"), font=("Consolas", 10),
                 fg=THEME_TEXT_SECONDARY, bg=THEME_SURFACE).pack(side=tk.LEFT)
         ttk.Combobox(row, textvariable=self.ai_model_var, width=18, state="readonly",
                     style="Modern.TCombobox", font=("Consolas", 10),
@@ -903,18 +1251,19 @@ class JiraReportApp:
         report_card = self._create_card(self.page_settings)
         report_card.pack(fill=tk.X, pady=(0, 12))
 
-        self._add_card_title(report_card, "Default Report Settings")
+        self._add_card_title(report_card, self.t("default_report_settings"))
 
         row = tk.Frame(report_card, bg=THEME_SURFACE)
         row.pack(fill=tk.X, pady=(0, 8))
-        tk.Label(row, text="Columns:", font=("Consolas", 10),
+        tk.Label(row, text=self.t("columns"), font=("Consolas", 10),
                 fg=THEME_TEXT_SECONDARY, bg=THEME_SURFACE).pack(side=tk.LEFT)
         ttk.Entry(row, textvariable=self.column_order_var,
                  style="Modern.TEntry", font=("Consolas", 10)).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(8, 0))
+        self._create_hint_label(report_card, self.t("column_order_hint")).pack(fill=tk.X, pady=(0, 8))
 
         row = tk.Frame(report_card, bg=THEME_SURFACE)
         row.pack(fill=tk.X, pady=(0, 8))
-        tk.Label(row, text="Header Align:", font=("Consolas", 10),
+        tk.Label(row, text=self.t("header_align"), font=("Consolas", 10),
                 fg=THEME_TEXT_SECONDARY, bg=THEME_SURFACE).pack(side=tk.LEFT)
         ttk.Combobox(row, textvariable=self.header_align_var, width=10, state="readonly",
                     style="Modern.TCombobox", font=("Consolas", 10),
@@ -922,20 +1271,17 @@ class JiraReportApp:
 
         row = tk.Frame(report_card, bg=THEME_SURFACE)
         row.pack(fill=tk.X, pady=(0, 8))
-        tk.Label(row, text="Cell Align:", font=("Consolas", 10),
+        tk.Label(row, text=self.t("cell_align"), font=("Consolas", 10),
                 fg=THEME_TEXT_SECONDARY, bg=THEME_SURFACE).pack(side=tk.LEFT)
         ttk.Combobox(row, textvariable=self.cell_align_var, width=10, state="readonly",
                     style="Modern.TCombobox", font=("Consolas", 10),
                     values=["left", "center", "right"]).pack(side=tk.LEFT, padx=(8, 0))
 
-        tk.Checkbutton(report_card, text="Highlight key issues in red",
-                      variable=self.key_issue_highlight_var,
-                      bg=THEME_SURFACE, fg=THEME_ERROR,
-                      selectcolor=THEME_PRIMARY, activebackground=THEME_SURFACE,
-                      font=("Consolas", 9), cursor="hand2").pack(anchor=tk.W, pady=(0, 8))
+        self._create_checkbox(report_card, self.t("highlight_key_issues"),
+                              self.key_issue_highlight_var).pack(anchor=tk.W, pady=(0, 8))
 
         # Save button
-        tk.Button(report_card, text="Save Settings", command=self._save_settings,
+        tk.Button(report_card, text=self.t("save_settings"), command=self._save_settings,
                  bg=THEME_PRIMARY, fg=THEME_PRIMARY_TEXT,
                  activebackground=THEME_PRIMARY_HOVER, relief="flat",
                  font=("Consolas", 10, "bold"), cursor="hand2", padx=16, pady=6).pack(anchor=tk.E)
@@ -951,13 +1297,29 @@ class JiraReportApp:
                 "column_order": self._normalize_column_order(self.column_order_var.get()),
                 "key_issue_highlight": bool(self.key_issue_highlight_var.get()),
                 "comment_timestamp_prefix": bool(self.comment_timestamp_prefix_var.get()),
+                "theme": self.theme_var.get(),
+                "language": self.language_code,
                 "last_save_dir": self.last_save_dir
             }
             with open(self.config_file, "w") as f:
                 json.dump(data, f)
-            messagebox.showinfo("Success", "Settings saved successfully!")
+            messagebox.showinfo(self.t("save_success_title"), self.t("save_success"))
         except Exception as e:
-            messagebox.showerror("Error", f"Failed to save settings:\n{e}")
+            messagebox.showerror(self.t("save_failed_title"), self.t("save_failed", error=e))
+
+    def on_theme_change(self, event=None):
+        selected_theme = self.theme_var.get()
+        if selected_theme not in THEME_PRESETS:
+            selected_theme = "Geek"
+            self.theme_var.set(selected_theme)
+        apply_theme(selected_theme)
+        self.save_ui_preferences()
+        self.rebuild_ui("settings")
+
+    def on_language_change(self, event=None):
+        self.language_code = LANGUAGE_OPTIONS.get(self.language_var.get(), "zh")
+        self.save_ui_preferences()
+        self.rebuild_ui("settings")
 
     def on_ai_summary_toggle(self):
         if self.use_ai_summary_var.get():
@@ -986,11 +1348,11 @@ class JiraReportApp:
         password = self.password_var.get()
 
         if not username or not password:
-            messagebox.showerror("Error", "Please enter username and password")
+            messagebox.showerror(self.t("login_missing_title"), self.t("login_missing_message"))
             return
 
         self.login_btn.config(state=tk.DISABLED)
-        self.update_status("Logging in...")
+        self.update_status(self.t("logging_in"))
 
         import threading
         thread = threading.Thread(target=self._login_thread, args=(url, username, password))
@@ -1064,13 +1426,13 @@ class JiraReportApp:
             self.username = result["username"]
             self.on_login_success(self.username)
         else:
-            messagebox.showerror("Login Failed", result["error"])
-            self.update_status("Login failed")
+            messagebox.showerror(self.t("login_failed_title"), result["error"])
+            self.update_status(self.t("login_failed"))
 
     def _handle_login_error(self, error):
         self.login_btn.config(state=tk.NORMAL)
-        messagebox.showerror("Connection Error", f"Cannot connect to Jira server:\n{error}")
-        self.update_status("Connection error")
+        messagebox.showerror(self.t("connection_error_title"), self.t("connection_error", error=error))
+        self.update_status(self.t("connection_error_title"))
 
     def on_login_success(self, username):
         self.logged_in = True
@@ -1080,12 +1442,12 @@ class JiraReportApp:
             self.save_credentials(username, self.password_var.get())
 
         self.login_status_sidebar.config(text=f"●", fg=THEME_SUCCESS)
-        self.login_status_label.config(text=f"Connected: {username}", fg=THEME_SUCCESS)
+        self.login_status_label.config(text=self.t("connected", username=username), fg=THEME_SUCCESS)
         self.login_btn.config(state=tk.DISABLED)
         self.logout_btn.config(state=tk.NORMAL)
         self.generate_btn.config(state=tk.NORMAL)
         self._update_filepath()
-        self.update_status(f"► Logged in as {username}")
+        self.update_status(self.t("logged_in", username=username))
         self._show_page("report")
 
     def logout(self):
@@ -1098,15 +1460,15 @@ class JiraReportApp:
             self.username = None
             self.user_email = None
             self.login_status_sidebar.config(text="●", fg=THEME_ERROR)
-            self.login_status_label.config(text="Not connected", fg=THEME_ERROR)
+            self.login_status_label.config(text=self.t("not_connected"), fg=THEME_ERROR)
             self.login_btn.config(state=tk.NORMAL)
             self.logout_btn.config(state=tk.DISABLED)
             self.generate_btn.config(state=tk.DISABLED)
             self.cancel_btn.config(state=tk.DISABLED)
-            self.update_status("► Logged out")
+            self.update_status(self.t("logged_out"))
 
     def update_status(self, message):
-        self.status_bar.config(text=f"► {message}")
+        self.status_bar.config(text=f"> {message}")
         self.root.update_idletasks()
 
     def _spin_step(self):
@@ -1161,7 +1523,7 @@ class JiraReportApp:
             return
         self.cancel_event.set()
         self.cancel_btn.config(state=tk.DISABLED, text="...")
-        self.update_processing("Cancelling...", "Waiting for current request to finish...", self.progress_var.get())
+        self.update_processing(self.t("cancelling"), self.t("cancel_detail"), self.progress_var.get())
 
     def check_cancelled(self):
         if self.cancel_event.is_set():
@@ -1177,18 +1539,20 @@ class JiraReportApp:
 
     def generate_report(self):
         if not self.logged_in:
-            messagebox.showerror("Error", "Please login first")
+            self.update_status(self.t("login_required_status"))
+            self._show_page("settings")
+            messagebox.showwarning(self.t("login_required_title"), self.t("login_required_message"))
             return
 
         try:
             start_date = datetime.datetime.strptime(self.start_date_var.get(), "%Y-%m-%d").date()
             end_date = datetime.datetime.strptime(self.end_date_var.get(), "%Y-%m-%d").date()
         except ValueError:
-            messagebox.showerror("Error", "Invalid date format. Use YYYY-MM-DD")
+            messagebox.showerror(self.t("date_error_title"), self.t("invalid_date"))
             return
 
         if end_date < start_date:
-            messagebox.showerror("Error", "End date must be after start date")
+            messagebox.showerror(self.t("date_error_title"), self.t("end_date_before_start"))
             return
 
         selected_status = self.status_filter_var.get().strip()
@@ -1201,7 +1565,7 @@ class JiraReportApp:
 
         filepath = self.filepath_var.get().strip()
         if not filepath:
-            messagebox.showerror("Error", "Please select a save path")
+            messagebox.showerror(self.t("save_path_title"), self.t("save_path_required"))
             return
         if not filepath.endswith(".xlsx"):
             filepath += ".xlsx"
@@ -1217,7 +1581,7 @@ class JiraReportApp:
         self.generation_running = True
         self.generate_btn.config(state=tk.DISABLED)
         self.cancel_btn.config(state=tk.NORMAL, text="✕")
-        self.start_processing("Starting...")
+        self.start_processing(self.t("starting"))
 
         thread = threading.Thread(target=self._generate_report_work,
                                   args=(start_date, end_date, selected_status, engineer_field, filepath))
@@ -1363,19 +1727,25 @@ class JiraReportApp:
             self.create_excel(issues, filepath, selected_status, start_date, end_date)
             self.check_cancelled()
 
-            self.root.after(0, lambda: self.update_processing("Done", "Report saved", 100))
+            self.root.after(0, lambda: self.update_processing(self.t("done"), self.t("report_saved"), 100))
             self.root.after(0, lambda: self.finish_generation_ui())
-            self.root.after(0, lambda: self.update_status(f"Report saved: {filepath}"))
-            self.root.after(0, lambda: messagebox.showinfo("Success", f"Report generated successfully!\n\n{len(issues)} issues exported to:\n{filepath}"))
+            self.root.after(0, lambda: self.update_status(self.t("report_saved_status", filepath=filepath)))
+            self.root.after(0, lambda: messagebox.showinfo(
+                self.t("generated_title"),
+                self.t("generated_message", count=len(issues), filepath=filepath)
+            ))
 
         except OperationCancelled:
             self.root.after(0, lambda: self.finish_generation_ui())
-            self.root.after(0, lambda: self.update_status("Cancelled"))
-            self.root.after(0, lambda: messagebox.showinfo("Cancelled", "Report generation was cancelled."))
+            self.root.after(0, lambda: self.update_status(self.t("cancelled_status")))
+            self.root.after(0, lambda: messagebox.showinfo(self.t("cancelled_title"), self.t("cancelled_message")))
         except Exception as e:
             self.root.after(0, lambda: self.finish_generation_ui())
-            self.root.after(0, lambda: messagebox.showerror("Error", f"Failed:\n{str(e)}"))
-            self.root.after(0, lambda: self.update_status("Failed"))
+            self.root.after(0, lambda: messagebox.showerror(
+                self.t("generation_failed_title"),
+                self.t("generation_failed", error=str(e))
+            ))
+            self.root.after(0, lambda: self.update_status(self.t("generation_failed_title")))
 
     def fetch_issues(self, jql, start_at=0, max_results=100):
         all_issues = []
