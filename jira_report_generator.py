@@ -572,20 +572,33 @@ class JiraReportApp:
         Normal issue:
           Customer: customfield_11029
           Model:    customfield_12031
+        ST issue:
+          Customer: Issue Type (issuetype.name, e.g. Normal BUG)
+          Model:    customfield_11043
         R&D issue (e.g. SW-*):
           Customer: Epic Name(customfield_10102) -> Epic Link(customfield_10100)
           Model:    Platform(customfield_10400/10401)
         """
         issue_key = str(issue_key or "")
+        is_st_issue = issue_key.upper().startswith("ST")
         is_rd_issue = issue_key.upper().startswith("SW")
 
         customer = self._field_to_text(fields.get("customfield_11029"))
         model = self._field_to_text(fields.get("customfield_12031"))
 
+        issue_type_field = fields.get("issuetype")
+        if isinstance(issue_type_field, dict):
+            issue_type = str(issue_type_field.get("name", "") or "").strip()
+        else:
+            issue_type = self._field_to_text(issue_type_field)
+        st_model = self._field_to_text(fields.get("customfield_11043"))
         epic_name = self._extract_epic_display_name(fields)
         platform = self._field_to_text(fields.get("customfield_10400")) or self._field_to_text(fields.get("customfield_10401"))
 
-        if is_rd_issue:
+        if is_st_issue:
+            customer = issue_type or customer
+            model = st_model or model
+        elif is_rd_issue:
             customer = epic_name or customer
             model = platform or model
         else:
@@ -1755,7 +1768,7 @@ class JiraReportApp:
             "jql": jql,
             "startAt": start_at,
             "maxResults": max_results,
-            "fields": "summary,status,priority,created,updated,resolutiondate,creator,key,assignee,customfield_12001,customfield_11029,customfield_12031,customfield_10100,customfield_10102,customfield_10400,customfield_10401"
+            "fields": "summary,status,priority,issuetype,created,updated,resolutiondate,creator,key,assignee,customfield_12001,customfield_11029,customfield_12031,customfield_11043,customfield_10100,customfield_10102,customfield_10400,customfield_10401"
         }
 
         while True:
