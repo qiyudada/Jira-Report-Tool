@@ -1621,6 +1621,21 @@ class JiraReportApp:
             if status_clause:
                 jql_assist_wait3rd += f' AND {status_clause}'
 
+            st_bug_review_values = [
+                "ST下一版本验证",
+                "ST最新版本验证",
+                "不再修复",
+                "升A修复",
+                "升V修复",
+                "暂不修复",
+            ]
+            st_bug_review_clause = ", ".join(f'"{value}"' for value in st_bug_review_values)
+            jql_st_bug_review = (
+                f'"ST BUG评估意见" in ({st_bug_review_clause}) '
+                f'AND updated >= {start_date} AND updated <= "{end_date} 23:59" '
+                f'AND assignee in (currentUser()) ORDER BY updated DESC'
+            )
+
             self.check_cancelled()
             self.root.after(0, lambda: self.update_processing("Searching issues...", f"Searching assigned issues...", 5))
             issues_assigned_normal = self.fetch_issues(jql_normal)
@@ -1638,6 +1653,11 @@ class JiraReportApp:
             issues_assist = issues_assist_normal + issues_assist_wait3rd
             self.check_cancelled()
             self.root.after(0, lambda: self.update_processing(f"Found {len(issues_assist)} assist issues", f"{len(issues_assist_normal)} normal + {len(issues_assist_wait3rd)} WAIT_3RD", 35))
+
+            self.root.after(0, lambda: self.update_processing("Searching ST issues...", "Searching ST BUG review issues...", 38))
+            issues_st_bug_review = self.fetch_issues(jql_st_bug_review)
+            self.check_cancelled()
+            self.root.after(0, lambda: self.update_processing(f"Found {len(issues_st_bug_review)} ST issues", "Matched ST BUG review criteria", 40))
 
             no_comment_required_statuses = {"WAIT 3RD PARTY", "WORKING"}
             wait_blocked_statuses = {"WAIT FAE INFO", "WORKED AROUND", "WAIT OFFICIAL RELEASE"}
@@ -1723,7 +1743,7 @@ class JiraReportApp:
                     self.root.after(0, lambda k=issue['key'], p=progress: self.update_processing("Filtering issues...", f"Skipping {k} - no activity", p))
             issues_assist = issues_assist_filtered
 
-            all_issues = {issue['key']: issue for issue in issues_assigned + issues_assist}
+            all_issues = {issue['key']: issue for issue in issues_assigned + issues_assist + issues_st_bug_review}
             issues = list(all_issues.values())
 
             def get_created_timestamp(issue):
