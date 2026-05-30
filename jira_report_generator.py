@@ -548,6 +548,22 @@ class JiraReportApp:
     def _is_jira_issue_key_text(self, text):
         return bool(re.fullmatch(r'[A-Z][A-Z0-9]+-\d+', str(text or "").strip(), flags=re.IGNORECASE))
 
+    def _is_st_issue(self, issue_key):
+        return str(issue_key or "").upper().startswith("ST")
+
+    def _resolve_key_issue_value(self, issue_key, fields):
+        """Resolve the Excel key-issue column value and whether it should be highlighted."""
+        if self._is_st_issue(issue_key):
+            severity = self._field_to_text(fields.get("customfield_11044"))
+            match = re.match(r'\s*([A-E])(?:\b|-)', severity, flags=re.IGNORECASE)
+            severity_level = match.group(1).upper() if match else severity.strip()
+            return severity_level, severity_level in ("A", "B")
+
+        priority = fields.get("priority", {})
+        priority_name = priority.get("name", "") if isinstance(priority, dict) else priority
+        is_key_issue = priority_name in ("Highest", "High")
+        return "是" if is_key_issue else "否", is_key_issue
+
     def _extract_epic_display_name(self, fields):
         """Extract readable epic title; do not fallback to raw issue key."""
         epic_name = self._field_to_text(fields.get("customfield_10102"))
@@ -580,7 +596,7 @@ class JiraReportApp:
           Model:    Platform(customfield_10400/10401)
         """
         issue_key = str(issue_key or "")
-        is_st_issue = issue_key.upper().startswith("ST")
+        is_st_issue = self._is_st_issue(issue_key)
         is_rd_issue = issue_key.upper().startswith("SW")
 
         customer = self._field_to_text(fields.get("customfield_11029"))
@@ -1788,7 +1804,7 @@ class JiraReportApp:
             "jql": jql,
             "startAt": start_at,
             "maxResults": max_results,
-            "fields": "summary,status,priority,issuetype,created,updated,resolutiondate,creator,key,assignee,customfield_12001,customfield_11029,customfield_12031,customfield_11043,customfield_10100,customfield_10102,customfield_10400,customfield_10401"
+            "fields": "summary,status,priority,issuetype,created,updated,resolutiondate,creator,key,assignee,customfield_12001,customfield_11029,customfield_12031,customfield_11043,customfield_11044,customfield_10100,customfield_10102,customfield_10400,customfield_10401"
         }
 
         while True:
@@ -2561,10 +2577,10 @@ class JiraReportApp:
         ws_options.sheet_state = "hidden"
         for i, opt in enumerate(["WAIT FAE INFO", "WORKED AROUND", "WORKING", "CLOSED", "RESOLVED", "WAIT 3RD PARTY"], 1):
             ws_options.cell(row=i, column=1, value=opt)
-        for i, opt in enumerate(["是", "否"], 1):
+        for i, opt in enumerate(["是", "否", "A", "B", "C", "D", "E"], 1):
             ws_options.cell(row=i, column=2, value=opt)
         status_options_range = f"_Options!$A$1:$A$6"
-        key_issue_options_range = f"_Options!$B$1:$B$2"
+        key_issue_options_range = f"_Options!$B$1:$B$7"
 
         dv_status = DataValidation(type="list", formula1=status_options_range, allow_blank=True)
         dv_status.error = "Please select a valid status"
@@ -2641,13 +2657,15 @@ class JiraReportApp:
                 self.root.after(0, lambda k=issue_key, p=progress: self.update_processing(f"Fetching comment for {k}...", "", p))
                 latest_comment = self.get_user_latest_comment(issue_key, start_date, end_date) or ""
 
+            key_issue_value, highlight_key_issue = self._resolve_key_issue_value(issue_key, fields)
+
             values = [
                 customer_name,
                 model_name,
                 fields.get("summary", ""),
                 issue_key,
                 fields.get("status", {}),
-                fields.get("priority", {}),
+                key_issue_value,
                 latest_comment,
             ]
 
@@ -2655,9 +2673,6 @@ class JiraReportApp:
                 val = values[idx]
                 if idx == 4:
                     val = val.get("name", "") if isinstance(val, dict) else val
-                elif idx == 5:
-                    priority_name = val.get("name", "") if isinstance(val, dict) else val
-                    val = "是" if priority_name in ("Highest", "High") else "否"
 
                 cell = ws.cell(row=row, column=col, value=val)
                 if idx == 3:
@@ -2665,7 +2680,7 @@ class JiraReportApp:
                 set_cell_font(cell, val)
                 cell.alignment = cell_alignment
                 cell.border = border
-                if idx == 5 and val == "是" and self.key_issue_highlight_var.get():
+                if idx == 5 and highlight_key_issue and self.key_issue_highlight_var.get():
                     cell.fill = PatternFill(fill_type="solid", start_color="FFFFC7CE", end_color="FFFFC7CE")
 
             progress = 90 + ((row - 1) / total_rows) * 8
