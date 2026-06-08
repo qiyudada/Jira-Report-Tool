@@ -14,11 +14,21 @@ from datetime import timedelta
 import calendar
 import os
 import re
+import sys
 import threading
 import openpyxl
 from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
 from openpyxl.utils import get_column_letter
 from openpyxl.worksheet.datavalidation import DataValidation
+
+# Make the shared `src` package importable from this single-file GUI entry.
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from src.blocked import (  # noqa: E402
+    BLOCKED_STATUSES,
+    BLOCKED_STATUS_MARKERS,
+    BLOCKED_STATUS_MARKER_DEFAULT,
+    compute_blocked_marker,
+)
 
 
 # Product theme presets
@@ -1727,7 +1737,10 @@ class JiraReportApp:
                     return self.user_commented_in_date_range(issue['key'], start_date, end_date)
 
                 if status_key in closed_statuses and self._is_current_user(sde_field):
-                    if field_date_in_range(issue, "resolutiondate") or field_date_in_range(issue, "updated"):
+                    # updated 字段会因为任何属性变更（标签/关注人/附件/别人操作）而被刷新，
+                    # 不能作为"本期有活动"的可靠证据。这里改用 resolutiondate + 当前用户评论
+                    # 两个稳定信号来判定，避免历史已关闭单子被误记。
+                    if field_date_in_range(issue, "resolutiondate") or self.user_commented_in_date_range(issue['key'], start_date, end_date):
                         return True
 
                 # 其他状态：当前用户在时间区间内有评论就保留
@@ -2260,9 +2273,17 @@ class JiraReportApp:
 
         return "\n".join(formatted)
 
-    def summarize_progress_with_ai(self, issue_key, summary, comments, model):
+    def _blocked_status_marker(self, status, comments, end_date):
+        """Thin wrapper around the shared compute_blocked_marker in src.blocked."""
+        return compute_blocked_marker(status, comments, end_date)
+
+    def summarize_progress_with_ai(self, issue_key, summary, comments, model, status="", end_date=None):
         """Use DeepSeek AI to summarize issue progress from comments"""
         self.check_cancelled()
+        blocked_marker = compute_blocked_marker(status, comments, end_date)
+        if blocked_marker:
+            return blocked_marker
+
         api_key = self.saved_deepseek_api_key.strip()
         if not api_key:
             return "[AI总结] 未配置API Key"
@@ -2408,26 +2429,48 @@ class JiraReportApp:
                 pass
         return None
 
-    def batch_summarize_with_ai(self, issues_data, model):
+    def batch_summarize_with_ai(self, issues_data, model, end_date=None):
         """Batch summarize multiple issues with a single API call
 
-        issues_data: list of dicts with {issue_key, summary, comments}
+        issues_data: list of dicts with {issue_key, summary, comments, status}
         Returns: dict mapping issue_key to summary
         """
         self.check_cancelled()
+
+        # Partition: blocked-status issues with no in-period activity
+        # get a static marker and skip the AI call entirely.
+        blocked_results = {}
+        ai_candidates = []
+        for item in issues_data:
+            marker = self._blocked_status_marker(
+                item.get('status', ''),
+                item.get('comments', []),
+                end_date,
+            )
+            if marker:
+                blocked_results[item['issue_key']] = marker
+            else:
+                ai_candidates.append(item)
+
+        if not ai_candidates:
+            return blocked_results
+
         api_key = self.saved_deepseek_api_key.strip()
         if not api_key:
-            return {item['issue_key']: "未配置API Key" for item in issues_data}
+            return {**blocked_results, **{item['issue_key']: "未配置API Key" for item in ai_candidates}}
 
         # Filter items with comments
-        items_with_comments = [item for item in issues_data if item['comments']]
+        items_with_comments = [item for item in ai_candidates if item['comments']]
         if not items_with_comments:
-            return {item['issue_key']: "无评论" for item in issues_data}
+            return {**blocked_results, **{item['issue_key']: "无评论" for item in ai_candidates}}
 
         def batch_fallback():
             return {
-                item['issue_key']: self._fallback_summary(item['comments']) if item['comments'] else "无评论"
-                for item in issues_data
+                **blocked_results,
+                **{
+                    item['issue_key']: self._fallback_summary(item['comments']) if item['comments'] else "无评论"
+                    for item in ai_candidates
+                },
             }
 
         # Build combined prompt
@@ -2489,7 +2532,7 @@ class JiraReportApp:
                 choices = result.get("choices", [])
                 if choices:
                     content = choices[0].get("message", {}).get("content", "").strip()
-                    return self._parse_batch_results(content, items_with_comments)
+                    return {**blocked_results, **self._parse_batch_results(content, items_with_comments)}
 
         except OperationCancelled:
             raise
@@ -2614,7 +2657,8 @@ class JiraReportApp:
                 issues_data.append({
                     "issue_key": issue_key,
                     "summary": fields.get("summary", ""),
-                    "comments": all_comments
+                    "comments": all_comments,
+                    "status": (fields.get("status") or {}).get("name", ""),
                 })
 
             if self.batch_mode_var.get():
@@ -2627,7 +2671,7 @@ class JiraReportApp:
                     batch = issues_data[i:i+batch_size]
                     progress = 80 + (batch_index / total_batches) * 10
                     self.root.after(0, lambda b=batch_index, t=total_batches, p=progress: self.update_processing("AI batch summarizing...", f"Batch {b}/{t}", p))
-                    results = self.batch_summarize_with_ai(batch, self.ai_model_var.get())
+                    results = self.batch_summarize_with_ai(batch, self.ai_model_var.get(), end_date=end_date)
                     latest_comments.update(results)
             else:
                 # Individual mode: process one by one
@@ -2640,7 +2684,9 @@ class JiraReportApp:
                         item['issue_key'],
                         item['summary'],
                         item['comments'],
-                        self.ai_model_var.get()
+                        self.ai_model_var.get(),
+                        status=item.get('status', ''),
+                        end_date=end_date,
                     )
                     latest_comments[item['issue_key']] = ai_summary
 

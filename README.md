@@ -29,20 +29,39 @@ Claude Code will guide you through the required parameters and invoke the CLI au
 
 ## CLI Usage
 
+The CLI exposes three subcommands. The `run` subcommand is the legacy one-shot
+path (still the default if no subcommand is given). The `prepare` / `export`
+pair is the recommended path for AI agents: the agent itself writes the AI
+summary between them, so no DeepSeek key is needed.
+
+### `prepare` + `export` (recommended for AI agents)
+
 ```bash
-python cli.py -u <username> -p <password> --start <YYYY-MM-DD> --end <YYYY-MM-DD> -o <output.xlsx>
+# Step 1: pull data and write data.json
+python cli.py prepare -u user@quectel.com -p password \
+  --start 2026-05-01 --end 2026-05-31 -o /tmp/data.json
+
+# Step 2: agent reads /tmp/data.json, writes /tmp/summaries.json
+#   (see skills/jira_report/SKILL.md for the summary rules)
+
+# Step 3: render the Excel
+python cli.py export --input /tmp/data.json \
+                     --summaries /tmp/summaries.json \
+                     -o ~/Downloads/jira_report.xlsx
 ```
 
-**Example:**
-```bash
-python cli.py -u user@quectel.com -p password123 \
-  --start 2026-05-01 --end 2026-05-31 \
-  -o ~/Downloads/jira_report.xlsx
-```
+`data.json` includes `prefilled_summary` for issues that are in a blocked
+status (WAIT FAE INFO / WORKED AROUND / WAIT OFFICIAL RELEASE) with no
+in-period activity. The agent must skip those — `export` uses the prefilled
+text and ignores any agent summary for the same key.
 
-**With AI summarization:**
+### `run` (legacy one-shot, uses DeepSeek for AI)
+
+The same flags as before, just under an explicit `run` subcommand (which is
+the default, so old invocations still work).
+
 ```bash
-DEEPSEEK_API_KEY=your_api_key python cli.py \
+DEEPSEEK_API_KEY=your_api_key python cli.py run \
   -u user@quectel.com -p password123 \
   --start 2026-05-01 --end 2026-05-31 \
   -o ~/Downloads/jira_report.xlsx --ai
@@ -50,20 +69,47 @@ DEEPSEEK_API_KEY=your_api_key python cli.py \
 
 ### CLI Options
 
+#### Common (all subcommands)
 | Option | Required | Default | Description |
 |--------|----------|---------|-------------|
 | `-u/--username` | Yes | - | Jira username (email format) |
 | `-p/--password` | Yes | - | Jira password |
 | `--start` | Yes | - | Start date (YYYY-MM-DD) |
 | `--end` | Yes | - | End date (YYYY-MM-DD) |
-| `-o/--output` | Yes | - | Output Excel file path |
 | `--status` | No | ALL | Filter by status |
-| `--ai` | No | - | Enable AI summarization |
-| `--ai-model` | No | deepseek-chat | DeepSeek model |
-| `--batch-mode` | No | - | Use batch AI mode |
-| `--batch-size` | No | 10 | AI batch size |
-| `--fetch-comment` | No | - | Fetch latest comment as progress |
 | `--columns` | No | 1,2,3,4,5,6,7 | Column order |
+| `--header-align` | No | left | Header alignment |
+| `--cell-align` | No | center | Cell alignment |
+| `--no-key-highlight` | No | - | Disable key issue highlighting |
+
+#### `run` only (DeepSeek AI)
+| Option | Description |
+|--------|-------------|
+| `--ai` | Enable AI summarization via DeepSeek |
+| `--ai-key` | DeepSeek API key (or set `DEEPSEEK_API_KEY` env var) |
+| `--ai-model` | DeepSeek model (default: `deepseek-chat`) |
+| `--batch-mode` | Use batch AI mode |
+| `--batch-size` | AI batch size (default: 10) |
+| `--fetch-comment` | Fetch latest comment as progress |
+| `--timestamp-prefix` | Add timestamp prefix to comments |
+
+#### `export` only
+| Option | Description |
+|--------|-------------|
+| `--input` | Path to `data.json` from `prepare` |
+| `--summaries` | Path to `summaries.json` (flat `{issue_key: summary}`) |
+
+## Skill Mode vs GUI Mode
+
+| | GUI (`jira_report_generator.py`) | Skill (agent + `cli.py prepare/export`) |
+|---|---|---|
+| AI summary | DeepSeek API | **Agent itself** (no external LLM) |
+| Setup | Needs `DEEPSEEK_API_KEY` | No LLM key needed |
+| Use case | Manual weekly report | Programmatic / agent workflow |
+| Multi-issue batching | `--batch-mode` | Agent batches naturally |
+
+Both modes produce identical Excel output (columns, hyperlinks, dropdowns,
+red highlighting for key issues).
 
 ## Pack to EXE (Optional)
 

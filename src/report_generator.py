@@ -4,11 +4,16 @@ Report Generator - Issue filtering and Excel generation
 import datetime
 import re
 import os
+import json
+import sys
 import openpyxl
 from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
 from openpyxl.utils import get_column_letter
 from openpyxl.worksheet.datavalidation import DataValidation
 from datetime import timedelta
+
+from .blocked import compute_blocked_marker
+from .config import Config
 
 
 class ReportGenerator:
@@ -26,8 +31,21 @@ class ReportGenerator:
                  batch_mode: bool = False,
                  batch_size: int = 10,
                  ai_summarizer=None):
-        """Generate Jira report Excel file"""
-        # Build JQLs
+        """Generate Jira report Excel file (legacy one-shot path used by
+        `cli.py run --ai` and direct Python callers). For the skill/agent flow,
+        use `collect_issues_data` + `export_from_data` instead."""
+        issues = self._fetch_and_filter_issues(start_date, end_date, status_filter)
+
+        # Create Excel
+        self._create_excel(issues, output_path, status_filter, start_date, end_date,
+                          use_ai_summary, fetch_comment, batch_mode, batch_size, ai_summarizer)
+
+        return len(issues)
+
+    def _fetch_and_filter_issues(self, start_date: datetime.date, end_date: datetime.date,
+                                  status_filter: str) -> list:
+        """Fetch issues across all JQL queries, filter, deduplicate, and sort.
+        Shared by `generate` (legacy) and `collect_issues_data` (skill flow)."""
         status_clause = f'status = "{status_filter}" ' if status_filter != "ALL" else ""
 
         jql_normal = f'"{self.ENGINEER_FIELD}" IN (currentUser()) AND updated >= {start_date} AND updated <= "{end_date} 23:59"'
@@ -57,7 +75,6 @@ class ReportGenerator:
             f'AND assignee in (currentUser()) ORDER BY updated DESC'
         )
 
-        # Fetch issues
         issues_assigned_normal = self.client.fetch_issues(jql_normal)
         issues_assigned_wait3rd = self.client.fetch_issues(jql_wait3rd)
         issues_assigned = issues_assigned_normal + issues_assigned_wait3rd
@@ -68,7 +85,6 @@ class ReportGenerator:
 
         issues_st_bug_review = self.client.fetch_issues(jql_st_bug_review)
 
-        # Filter issues
         issues_assigned_filtered = [
             issue for issue in issues_assigned
             if self._should_include_issue(issue, start_date, end_date)
@@ -81,12 +97,144 @@ class ReportGenerator:
         all_issues = {issue['key']: issue for issue in issues_assigned_filtered + issues_assist_filtered + issues_st_bug_review}
         issues = list(all_issues.values())
         issues.sort(key=lambda x: -self._get_created_timestamp(x))
+        return issues
 
-        # Create Excel
-        self._create_excel(issues, output_path, status_filter, start_date, end_date,
-                          use_ai_summary, fetch_comment, batch_mode, batch_size, ai_summarizer)
+    def collect_issues_data(self, start_date: datetime.date, end_date: datetime.date,
+                             status_filter: str = "ALL") -> dict:
+        """Fetch + filter + collect comments. Emit a JSON-serializable dict the
+        agent (or test code) can consume. No AI is called here — `prefilled_summary`
+        is the only automatic 进展 text, applied to blocked-status issues with no
+        in-period activity."""
+        issues = self._fetch_and_filter_issues(start_date, end_date, status_filter)
+        context_start = end_date - timedelta(days=60)
 
-        return len(issues)
+        out_issues = []
+        for issue in issues:
+            issue_key = issue.get("key", "")
+            fields = issue.get("fields", {})
+            status = (fields.get("status") or {}).get("name", "")
+            comments = self._get_all_comments_in_range(
+                issue_key, start_date, end_date, context_start=context_start,
+            )
+            customer_name, model_name = self._resolve_customer_and_model(issue_key, fields)
+            key_issue_value, highlight_key_issue = self._resolve_key_issue_value(issue_key, fields)
+            prefilled = compute_blocked_marker(status, comments, end_date) or ""
+
+            out_issues.append({
+                "key": issue_key,
+                "summary": fields.get("summary", ""),
+                "status": status,
+                "customer_name": customer_name,
+                "model_name": model_name,
+                "key_issue": key_issue_value,
+                "highlight_key_issue": highlight_key_issue,
+                "comments": [
+                    {
+                        "author": c.get("author", ""),
+                        "date": c["date"].isoformat() if hasattr(c.get("date"), "isoformat") else c.get("date"),
+                        "body": c.get("body", ""),
+                        "in_period": c.get("in_period", True),
+                        "author_role": c.get("author_role", ""),
+                    }
+                    for c in comments
+                ],
+                "prefilled_summary": prefilled,
+            })
+
+        return {
+            "metadata": {
+                "start_date": start_date.isoformat(),
+                "end_date": end_date.isoformat(),
+                "generated_at": datetime.datetime.now().isoformat(timespec="seconds"),
+                "status_filter": status_filter,
+                "column_order": self.config.column_order,
+                "key_issue_highlight": self.config.key_issue_highlight,
+                "header_align": self.config.header_align,
+                "cell_align": self.config.cell_align,
+                "jira_base_url": Config.JIRA_BASE_URL,
+            },
+            "issues": out_issues,
+        }
+
+    def export_from_data(self, data: dict, summaries: dict, output_path: str) -> int:
+        """Render an Excel report from a previously-collected `data` dict and an
+        agent-supplied `summaries` mapping (issue_key -> summary text).
+        `prefilled_summary` (if set) takes precedence over `summaries`. Missing
+        or empty entries in `summaries` produce an empty 进展 cell (with a stderr
+        warning). Returns the number of issues written."""
+        metadata = data.get("metadata") or {}
+        start_date = datetime.date.fromisoformat(metadata["start_date"])
+        end_date = datetime.date.fromisoformat(metadata["end_date"])
+        status_filter = metadata.get("status_filter", "ALL")
+
+        out_issues = []
+        latest_comments = {}
+        expected_keys = set()
+        for issue in data.get("issues", []):
+            issue_key = issue["key"]
+            expected_keys.add(issue_key)
+            prefilled = (issue.get("prefilled_summary") or "").strip()
+            if prefilled:
+                latest_comments[issue_key] = prefilled
+            elif issue_key in summaries:
+                text = (summaries[issue_key] or "").strip()
+                if text:
+                    latest_comments[issue_key] = text
+                else:
+                    print(f"Warning: empty summary for {issue_key}, leaving 进展 blank.", file=sys.stderr)
+            else:
+                print(f"Warning: missing summary for {issue_key}, leaving 进展 blank.", file=sys.stderr)
+            out_issues.append(self._issue_dict_to_jira_shape(issue))
+
+        extra_keys = set(summaries.keys()) - expected_keys
+        for k in extra_keys:
+            print(f"Warning: summary provided for unknown issue {k}, ignoring.", file=sys.stderr)
+
+        # Apply metadata-derived config overrides so the rendered Excel matches
+        # the prepare-time settings, regardless of the current Config object.
+        self._apply_metadata_overrides(metadata)
+
+        self._create_excel(
+            out_issues, output_path, status_filter, start_date, end_date,
+            use_ai_summary=False, fetch_comment=False,
+            precomputed_latest_comments=latest_comments,
+        )
+        return len(out_issues)
+
+    def _issue_dict_to_jira_shape(self, issue: dict) -> dict:
+        """Reconstruct the {'key', 'fields': {...}} shape that _create_excel
+        expects from a flat issue dict in the JSON data file."""
+        fields = {
+            "summary": issue.get("summary", ""),
+            "status": {"name": issue.get("status", "")},
+        }
+        # Re-supply the original field ids that the resolver helpers read.
+        # _resolve_customer_and_model falls back to "" when these are missing,
+        # so the prepare-supplied customer_name/model_name survive.
+        fields["customfield_11029"] = issue.get("customer_name", "")
+        fields["customfield_12031"] = issue.get("model_name", "")
+        fields["customfield_10102"] = issue.get("customer_name", "")
+        fields["customfield_10400"] = issue.get("model_name", "")
+        fields["customfield_10401"] = issue.get("model_name", "")
+        fields["customfield_11043"] = issue.get("model_name", "")
+        fields["customfield_11044"] = issue.get("key_issue", "")
+        fields["priority"] = {"name": "High" if issue.get("highlight_key_issue") else "Medium"}
+        fields["issuetype"] = {"name": ""}
+        return {"key": issue["key"], "fields": fields}
+
+    def _apply_metadata_overrides(self, metadata: dict):
+        """Temporarily override config fields from `metadata` so the rendered
+        Excel matches the prepare-time settings. Touches only string fields;
+        persistent config on `self.config` is mutated in place but the caller
+        is expected to be a one-shot CLI invocation."""
+        if "column_order" in metadata:
+            self.config.column_order = metadata["column_order"]
+        if "key_issue_highlight" in metadata:
+            self.config.key_issue_highlight = bool(metadata["key_issue_highlight"])
+        if "header_align" in metadata:
+            self.config.header_align = metadata["header_align"]
+        if "cell_align" in metadata:
+            self.config.cell_align = metadata["cell_align"]
 
     def _get_created_timestamp(self, issue):
         created_str = issue.get("fields", {}).get("created", "")
@@ -206,7 +354,8 @@ class ReportGenerator:
 
     def _create_excel(self, issues, filepath, statuses, start_date, end_date,
                      use_ai_summary=False, fetch_comment=False,
-                     batch_mode=False, batch_size=10, ai_summarizer=None):
+                     batch_mode=False, batch_size=10, ai_summarizer=None,
+                     precomputed_latest_comments=None):
         """Create Excel report file"""
         wb = openpyxl.Workbook()
         ws = wb.active
@@ -271,9 +420,11 @@ class ReportGenerator:
         ws.add_data_validation(dv_key_issue)
         dv_key_issue.sqref = key_issue_range
 
-        # Pre-fetch AI summaries if enabled
-        latest_comments = {}
-        if use_ai_summary and ai_summarizer:
+        # Pre-fetch AI summaries if enabled. `precomputed_latest_comments` is
+        # the agent-supplied path (skill flow): when given, skip the AI entirely
+        # and trust the caller-provided mapping.
+        latest_comments = precomputed_latest_comments if precomputed_latest_comments is not None else {}
+        if precomputed_latest_comments is None and use_ai_summary and ai_summarizer:
             context_start = end_date - timedelta(days=60)
             issues_data = []
             for issue in issues:
