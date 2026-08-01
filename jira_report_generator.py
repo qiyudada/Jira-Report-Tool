@@ -23,6 +23,7 @@ from openpyxl.worksheet.datavalidation import DataValidation
 
 # Make the shared `src` package importable from this single-file GUI entry.
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from src.env_config import load_env, save_env, migrate_json_to_env, load_claude_settings  # noqa: E402
 from src.blocked import (  # noqa: E402
     BLOCKED_STATUSES,
     BLOCKED_STATUS_MARKERS,
@@ -146,6 +147,8 @@ LANGUAGE_LABELS = {value: key for key, value in LANGUAGE_OPTIONS.items()}
 I18N = {
     "zh": {
         "settings": "设置",
+        "expand_all": "全部展开",
+        "collapse_all": "全部收起",
         "ui_preferences": "界面偏好",
         "ui_preferences_subtitle": "选择语言和适合不同用户偏好的颜色风格",
         "language": "语言:",
@@ -159,6 +162,16 @@ I18N = {
         "not_connected": "未连接",
         "connected": "已连接: {username}",
         "ai_settings": "AI 设置",
+        "api_mode": "接入模式:",
+        "api_mode_official": "官方 API",
+        "api_mode_third_party": "第三方代理",
+        "provider": "AI 服务商:",
+        "powered_by": "{provider} 驱动",
+        "api_key_label": "{provider} API Key:",
+        "tp_auth_token_label": "认证令牌:",
+        "tp_base_url_label": "代理地址:",
+        "custom_endpoint": "自定义端点:",
+        "custom_endpoint_hint": "输入 OpenAI 兼容的 API 地址",
         "model": "模型:",
         "default_report_settings": "默认日报设置",
         "columns": "列顺序:",
@@ -227,9 +240,13 @@ I18N = {
         "starting": "开始生成...",
         "cancelling": "正在取消...",
         "cancel_detail": "等待当前请求结束...",
+        "ai_key_missing_title": "未配置 AI Key",
+        "ai_key_missing_message": 'AI 总结已启用，但未配置 API Key。\n请在「设置」页面 →「AI 设置」中配置 API Key，\n或取消勾选「启用 AI 总结」后重试。',
     },
     "en": {
         "settings": "Settings",
+        "expand_all": "Expand All",
+        "collapse_all": "Collapse All",
         "ui_preferences": "UI Preferences",
         "ui_preferences_subtitle": "Choose language and a color style for different users",
         "language": "Language:",
@@ -243,6 +260,16 @@ I18N = {
         "not_connected": "Not connected",
         "connected": "Connected: {username}",
         "ai_settings": "AI Settings",
+        "api_mode": "API Mode:",
+        "api_mode_official": "Official API",
+        "api_mode_third_party": "Third-party Proxy",
+        "provider": "Provider:",
+        "powered_by": "Powered by {provider}",
+        "api_key_label": "{provider} API Key:",
+        "tp_auth_token_label": "Auth Token:",
+        "tp_base_url_label": "Base URL:",
+        "custom_endpoint": "Custom Endpoint:",
+        "custom_endpoint_hint": "Enter an OpenAI-compatible API URL",
         "model": "Model:",
         "default_report_settings": "Default Report Settings",
         "columns": "Columns:",
@@ -311,6 +338,8 @@ I18N = {
         "starting": "Starting...",
         "cancelling": "Cancelling...",
         "cancel_detail": "Waiting for current request to finish...",
+        "ai_key_missing_title": "AI Key Missing",
+        "ai_key_missing_message": "AI summary is enabled but no API key is configured.\nPlease go to Settings → AI Settings to configure your key,\nor uncheck \"Enable AI Summary\" and try again.",
     },
 }
 
@@ -372,12 +401,22 @@ class JiraReportApp:
         self.generation_running = False
 
         # Config file
-        self.config_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".jira_config")
+        self.config_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env")
+        self._legacy_config_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".jira_config")
         self.last_save_dir = os.path.expanduser("~")
 
         # Shared settings variables (created once, used by both Report and Settings pages)
         self.ai_model_var = tk.StringVar(value="deepseek-chat")
         self.api_key_var = tk.StringVar()
+        self.ai_provider_var = tk.StringVar(value="deepseek")
+        self.custom_endpoint_var = tk.StringVar(value="")
+        self.api_mode_var = tk.StringVar(value="official")
+        self.api_keys = {"deepseek": "", "openai": "", "anthropic": "", "custom": ""}
+        # Third-party proxy — global, not per-provider (Claude Code compat)
+        self.tp_auth_token = ""
+        self.tp_base_url = ""
+        self.tp_model = ""
+        self.tp_model_list = []                 # all non-empty tp-model keys as dropdown values
         self.username_var = tk.StringVar(value="")
         self.password_var = tk.StringVar(value="")
         self.remember_var = tk.BooleanVar(value=False)
@@ -399,16 +438,39 @@ class JiraReportApp:
         self.language_code = self.saved_language
         self.language_var.set(LANGUAGE_LABELS.get(self.language_code, "中文"))
         apply_theme(self.saved_theme)
+
+        # Set provider & api_mode before setup_ui so labels render correctly
+        self.ai_provider_var.set(self.saved_ai_provider)
+        self.ai_model_var.set(self.saved_ai_model)
+        self._last_provider = self.saved_ai_provider
+        self.api_mode_var.set(self.saved_api_mode)
+
         self.setup_ui()
 
-        # Apply saved values AFTER setup_ui creates the vars
+        # Apply remaining saved values AFTER setup_ui creates the vars
         if self.saved_username:
             self.username_var.set(self.saved_username)
             self.password_var.set(self.saved_password)
             self.remember_var.set(True)
 
-        self.api_key_var.set(self.saved_deepseek_api_key)
-        self.ai_model_var.set(self.saved_ai_model)
+        # Load third-party stored values
+        self.tp_auth_token = self.saved_tp_auth_token
+        self.tp_base_url = self.saved_tp_base_url
+        self.tp_model = self.saved_tp_model
+        self.tp_model_list = list(self.saved_tp_model_list)
+
+        # Display correct values based on API mode
+        if self.saved_api_mode == "third_party":
+            self.api_key_var.set(self.saved_tp_auth_token)
+            self.custom_endpoint_var.set(self.saved_tp_base_url)
+            self.ai_model_var.set(self.saved_tp_model or self.saved_ai_model)
+        else:
+            self.api_key_var.set(self.saved_api_keys.get(self.saved_ai_provider, ""))
+            self.custom_endpoint_var.set(self.saved_custom_endpoint)
+
+        # Keep api_keys in sync with the API key text field
+        self.api_key_var.trace_add("write", self._on_api_key_changed)
+        self.api_keys = dict(self.saved_api_keys)
         self.column_order_var.set(self._normalize_column_order(self.saved_column_order))
         self.key_issue_highlight_var.set(self.saved_key_issue_highlight)
         self.comment_timestamp_prefix_var.set(self.saved_comment_timestamp_prefix)
@@ -417,52 +479,213 @@ class JiraReportApp:
         self.on_comment_timestamp_toggle()
         self.on_fetch_comment_toggle()
 
+        # Auto-enable AI summary if a key is already configured in .env
+        if self._has_any_ai_key():
+            self.use_ai_summary_var.set(True)
+            self.on_ai_summary_toggle()
+
     def load_credentials(self):
         self.saved_username = ""
         self.saved_password = ""
         self.saved_deepseek_api_key = ""
         self.saved_ai_model = "deepseek-chat"
+        self.saved_ai_provider = "deepseek"
+        self.saved_api_mode = "official"
+        self.saved_api_keys = {"deepseek": "", "openai": "", "anthropic": "", "custom": ""}
+        self.saved_custom_endpoint = ""
+        self.saved_tp_auth_token = ""
+        self.saved_tp_base_url = ""
+        self.saved_tp_model = ""
+        self.saved_tp_model_list = []
         self.saved_column_order = "1,2,3,4,5,6,7"
         self.saved_key_issue_highlight = True
         self.saved_comment_timestamp_prefix = False
         self.saved_theme = "Geek"
         self.saved_language = "zh"
-        if os.path.exists(self.config_file):
+
+        # Auto-migrate old .jira_config to .env
+        if not os.path.exists(self.config_file) and os.path.exists(self._legacy_config_file):
             try:
-                with open(self.config_file, "r") as f:
-                    data = json.load(f)
-                    self.saved_username = data.get("username", "")
-                    self.saved_password = data.get("password", "")
-                    self.saved_deepseek_api_key = data.get("deepseek_api_key", "")
-                    self.saved_ai_model = data.get("ai_model", "deepseek-chat")
-                    self.saved_column_order = self._normalize_column_order(data.get("column_order", "1,2,3,4,5,6,7"))
-                    self.saved_key_issue_highlight = bool(data.get("key_issue_highlight", True))
-                    self.saved_comment_timestamp_prefix = bool(data.get("comment_timestamp_prefix", False))
-                    self.saved_theme = data.get("theme", "Geek")
-                    if self.saved_theme not in THEME_PRESETS:
-                        self.saved_theme = "Geek"
-                    self.saved_language = data.get("language", "zh")
-                    if self.saved_language not in I18N:
-                        self.saved_language = "zh"
-                    self.last_save_dir = data.get("last_save_dir", os.path.expanduser("~"))
+                migrate_json_to_env(self._legacy_config_file, self.config_file)
+                os.rename(self._legacy_config_file, self._legacy_config_file + ".bak")
             except:
                 pass
 
+        if os.path.exists(self.config_file):
+            try:
+                data = load_env(self.config_file)
+
+                # Layer .claude/settings.json env block over .env
+                project_dir = os.path.dirname(os.path.abspath(__file__))
+                claude_env = load_claude_settings(project_dir)
+
+                # Layer os.environ over .claude/settings.json (Claude Code injected vars win)
+                # Build a combined dict for third-party proxy tokens from ALL sources
+                tp_sources = dict(data)  # start with .env
+                if claude_env:
+                    # Map Claude naming conventions into tp_sources without mutating data
+                    tp_sources.update(claude_env)
+                for env_key in ("DEEPSEEK_API_KEY", "OPENAI_API_KEY", "ANTHROPIC_API_KEY",
+                                "CUSTOM_API_KEY", "AI_PROVIDER", "AI_MODEL",
+                                "ANTHROPIC_AUTH_TOKEN", "ANTHROPIC_BASE_URL",
+                                "ANTHROPIC_MODEL"):
+                    env_val = os.environ.get(env_key, "")
+                    if env_val:
+                        tp_sources[env_key] = env_val
+
+                # ── Security boundary ──
+                # Only use canonical keys from .env file + os.environ for
+                # the *official* API key slots.  NEVER inject third-party
+                # (Claude-style) tokens into canonical slots — otherwise
+                # save_ui_preferences() would write them back to .env
+                # and the user's third-party config would be overwritten.
+
+                # Official API keys — strictly from canonical .env keys + os.environ overrides
+                self.saved_api_keys["deepseek"] = (
+                    os.environ.get("DEEPSEEK_API_KEY", "") or
+                    (claude_env.get("DEEPSEEK_API_KEY", "") if claude_env else "") or
+                    data.get("DEEPSEEK_API_KEY", "")
+                )
+                self.saved_api_keys["openai"] = (
+                    os.environ.get("OPENAI_API_KEY", "") or
+                    (claude_env.get("OPENAI_API_KEY", "") if claude_env else "") or
+                    data.get("OPENAI_API_KEY", "")
+                )
+                self.saved_api_keys["anthropic"] = (
+                    os.environ.get("ANTHROPIC_API_KEY", "") or
+                    (claude_env.get("ANTHROPIC_API_KEY", "") if claude_env else "") or
+                    data.get("ANTHROPIC_API_KEY", "")
+                )
+                self.saved_api_keys["custom"] = (
+                    os.environ.get("CUSTOM_API_KEY", "") or
+                    (claude_env.get("CUSTOM_API_KEY", "") if claude_env else "") or
+                    data.get("CUSTOM_API_KEY", "")
+                )
+
+                # Third-party proxy tokens — from Claude-style keys across all sources.
+                # These are kept SEPARATE from canonical official keys.
+                self.saved_tp_auth_token = (
+                    tp_sources.get("ANTHROPIC_AUTH_TOKEN", "") or
+                    tp_sources.get("DEEPSEEK_AUTH_TOKEN", "") or
+                    tp_sources.get("OPENAI_AUTH_TOKEN", "") or
+                    ""
+                )
+                self.saved_tp_base_url = (
+                    tp_sources.get("ANTHROPIC_BASE_URL", "") or
+                    tp_sources.get("OPENAI_BASE_URL", "") or
+                    ""
+                )
+                self.saved_tp_model = (
+                    tp_sources.get("ANTHROPIC_MODEL", "") or
+                    tp_sources.get("ANTHROPIC_DEFAULT_OPUS_MODEL", "") or
+                    tp_sources.get("ANTHROPIC_DEFAULT_SONNET_MODEL", "") or
+                    tp_sources.get("ANTHROPIC_DEFAULT_HAIKU_MODEL", "") or
+                    tp_sources.get("CLAUDE_CODE_SUBAGENT_MODEL", "") or
+                    data.get("AI_MODEL", "") or ""
+                )
+                # Build dropdown list from all non-empty third-party model keys
+                _tp_keys = ("ANTHROPIC_MODEL", "ANTHROPIC_DEFAULT_OPUS_MODEL",
+                           "ANTHROPIC_DEFAULT_SONNET_MODEL", "ANTHROPIC_DEFAULT_HAIKU_MODEL",
+                           "CLAUDE_CODE_SUBAGENT_MODEL")
+                _seen = set()
+                self.saved_tp_model_list = []
+                for k in _tp_keys:
+                    v = tp_sources.get(k, "").strip()
+                    if v and v not in _seen:
+                        _seen.add(v)
+                        self.saved_tp_model_list.append(v)
+
+                # Generic settings — os.environ > .claude > .env
+                self.saved_username = data.get("JIRA_USERNAME", "")
+                self.saved_password = data.get("JIRA_PASSWORD", "")
+                self.saved_ai_model = (
+                    os.environ.get("AI_MODEL", "") or
+                    (claude_env.get("AI_MODEL", "") if claude_env else "") or
+                    data.get("AI_MODEL", "deepseek-chat")
+                )
+                self.saved_ai_provider = (
+                    os.environ.get("AI_PROVIDER", "") or
+                    (claude_env.get("AI_PROVIDER", "") if claude_env else "") or
+                    data.get("AI_PROVIDER", "deepseek")
+                )
+                self.saved_api_mode = data.get("AI_API_MODE", "official")
+                self.saved_custom_endpoint = (
+                    os.environ.get("CUSTOM_ENDPOINT", "") or
+                    (claude_env.get("CUSTOM_ENDPOINT", "") if claude_env else "") or
+                    data.get("CUSTOM_ENDPOINT", "")
+                )
+                self.saved_deepseek_api_key = self.saved_api_keys["deepseek"]
+                # os.environ ANTHROPIC_AUTH_TOKEN → official anthropic key for cli compatibility
+                env_anthr = os.environ.get("ANTHROPIC_AUTH_TOKEN", "")
+                if env_anthr and not self.saved_api_keys["anthropic"]:
+                    self.saved_api_keys["anthropic"] = env_anthr
+                # Auto-detect third-party mode if AI_API_MODE is not explicitly set
+                if not data.get("AI_API_MODE"):
+                    if self.saved_tp_auth_token or self.saved_tp_base_url:
+                        self.saved_api_mode = "third_party"
+                self.saved_column_order = self._normalize_column_order(data.get("COLUMN_ORDER", "1,2,3,4,5,6,7"))
+                self.saved_key_issue_highlight = bool(data.get("KEY_ISSUE_HIGHLIGHT", True))
+                self.saved_comment_timestamp_prefix = bool(data.get("COMMENT_TIMESTAMP_PREFIX", False))
+                self.saved_theme = data.get("THEME", "Geek")
+                if self.saved_theme not in THEME_PRESETS:
+                    self.saved_theme = "Geek"
+                self.saved_language = data.get("LANGUAGE", "zh")
+                if self.saved_language not in I18N:
+                    self.saved_language = "zh"
+                self.last_save_dir = data.get("LAST_SAVE_DIR", os.path.expanduser("~"))
+            except:
+                pass
+
+    def _build_save_data(self, existing=None):
+        """Build the canonical data dict for .env, including third-party keys.
+
+        Important: third-party values (proxy URL, auth token) are written ONLY to
+        the Claude-compat slots (ANTHROPIC_AUTH_TOKEN, ANTHROPIC_BASE_URL, etc.).
+        They are NEVER leaked into the official canonical slots (CUSTOM_ENDPOINT,
+        ANTHROPIC_API_KEY, etc.) — those stay as the user originally set them.
+        """
+        data = dict(existing or {})
+        mode = self.api_mode_var.get()
+        # --- Jira ---
+        data["JIRA_USERNAME"] = self.username_var.get()
+        data["JIRA_PASSWORD"] = self.password_var.get() if self.remember_var.get() else data.get("JIRA_PASSWORD", "")
+        data["LAST_SAVE_DIR"] = self.last_save_dir
+        # --- AI official ---
+        data["AI_PROVIDER"] = self.ai_provider_var.get()
+        data["AI_API_MODE"] = mode
+        data["AI_MODEL"] = self.ai_model_var.get()
+        # CUSTOM_ENDPOINT: in third-party mode, keep the .env value unchanged
+        # (the proxy URL lives in ANTHROPIC_BASE_URL, not CUSTOM_ENDPOINT).
+        data["CUSTOM_ENDPOINT"] = (
+            self.custom_endpoint_var.get() if mode == "official"
+            else data.get("CUSTOM_ENDPOINT", "")
+        )
+        data["DEEPSEEK_API_KEY"] = self.api_keys.get("deepseek", "")
+        data["OPENAI_API_KEY"] = self.api_keys.get("openai", "")
+        data["ANTHROPIC_API_KEY"] = self.api_keys.get("anthropic", "")
+        data["CUSTOM_API_KEY"] = self.api_keys.get("custom", "")
+        # --- Third-party / Claude Code compat keys (global) ---
+        data["ANTHROPIC_AUTH_TOKEN"] = self.tp_auth_token
+        data["ANTHROPIC_BASE_URL"] = self.tp_base_url
+        data["ANTHROPIC_MODEL"] = self.tp_model
+        # Clear the secondary compat slots so they don't conflict
+        data["DEEPSEEK_AUTH_TOKEN"] = ""
+        data["OPENAI_AUTH_TOKEN"] = ""
+        data["OPENAI_BASE_URL"] = ""
+        # --- Report formatting ---
+        data["COLUMN_ORDER"] = self._normalize_column_order(self.column_order_var.get())
+        data["KEY_ISSUE_HIGHLIGHT"] = bool(self.key_issue_highlight_var.get())
+        data["COMMENT_TIMESTAMP_PREFIX"] = bool(self.comment_timestamp_prefix_var.get())
+        data["THEME"] = self.theme_var.get()
+        data["LANGUAGE"] = self.language_code
+        return data
+
     def save_credentials(self, username, password):
         try:
-            with open(self.config_file, "w") as f:
-                json.dump({
-                    "username": username,
-                    "password": password,
-                    "deepseek_api_key": self.api_key_var.get(),
-                    "ai_model": self.ai_model_var.get(),
-                    "column_order": self._normalize_column_order(self.column_order_var.get()),
-                    "key_issue_highlight": bool(self.key_issue_highlight_var.get()),
-                    "comment_timestamp_prefix": bool(self.comment_timestamp_prefix_var.get()),
-                    "theme": self.theme_var.get(),
-                    "language": self.language_code,
-                    "last_save_dir": self.last_save_dir
-                }, f)
+            data = self._build_save_data()
+            data["JIRA_USERNAME"] = username
+            data["JIRA_PASSWORD"] = password
+            save_env(self.config_file, data)
         except:
             pass
 
@@ -471,21 +694,17 @@ class JiraReportApp:
         return text.format(**kwargs) if kwargs else text
 
     def save_ui_preferences(self):
-        """Persist non-login UI preferences without touching credentials."""
+        """Persist non-login UI preferences without losing credentials."""
         try:
-            data = {}
+            existing = {}
             if os.path.exists(self.config_file):
-                with open(self.config_file, "r") as f:
-                    data = json.load(f)
-            data["ai_model"] = self.ai_model_var.get()
-            data["column_order"] = self._normalize_column_order(self.column_order_var.get())
-            data["key_issue_highlight"] = bool(self.key_issue_highlight_var.get())
-            data["comment_timestamp_prefix"] = bool(self.comment_timestamp_prefix_var.get())
-            data["theme"] = self.theme_var.get()
-            data["language"] = self.language_code
-            data["last_save_dir"] = self.last_save_dir
-            with open(self.config_file, "w") as f:
-                json.dump(data, f)
+                existing = load_env(self.config_file)
+            data = self._build_save_data(existing)
+            # Preserve Jira credentials from existing if not set in UI
+            if not self.username_var.get():
+                data["JIRA_USERNAME"] = existing.get("JIRA_USERNAME", self.saved_username)
+                data["JIRA_PASSWORD"] = existing.get("JIRA_PASSWORD", self.saved_password)
+            save_env(self.config_file, data)
         except:
             pass
 
@@ -673,8 +892,19 @@ class JiraReportApp:
                        bordercolor=THEME_BORDER, borderwidth=1, relief="solid")
         style.map("Modern.TCombobox",
                  fieldbackground=[("readonly", THEME_SURFACE_RAISED)],
+                 foreground=[("readonly", THEME_TEXT)],
+                 background=[("readonly", THEME_SURFACE_HOVER)],
                  selectbackground=[("readonly", THEME_PRIMARY)],
-                 selectforeground=[("readonly", THEME_TEXT)])
+                 selectforeground=[("readonly", THEME_PRIMARY_TEXT)])
+
+        # Style the internal dropdown listbox (applies to clam theme's popdown widget)
+        # Without these, the dropdown items default to system colors which may
+        # be too dark (or too light) to read under a dark theme like Geek.
+        self.root.option_add("*TCombobox*Listbox.background", THEME_SURFACE_HOVER)
+        self.root.option_add("*TCombobox*Listbox.foreground", THEME_TEXT)
+        self.root.option_add("*TCombobox*Listbox.selectBackground", THEME_PRIMARY)
+        self.root.option_add("*TCombobox*Listbox.selectForeground", THEME_PRIMARY_TEXT)
+        self.root.option_add("*TCombobox*Listbox.font", ("Consolas", 11))
 
         # Checkbutton
         style.configure("Modern.TCheckbutton", background=THEME_SURFACE,
@@ -705,7 +935,7 @@ class JiraReportApp:
         return card
 
     def _add_card_title(self, card, title, subtitle=None):
-        """Add title and optional subtitle to a card"""
+        """Add title and optional subtitle to a card (non-collapsible)."""
         title_frame = tk.Frame(card, bg=THEME_SURFACE)
         title_frame.pack(anchor=tk.W, pady=(0, 12))
         tk.Label(title_frame, text=title, font=("Consolas", 13, "bold"),
@@ -713,6 +943,65 @@ class JiraReportApp:
         if subtitle:
             tk.Label(title_frame, text=subtitle, font=("Consolas", 9),
                     fg=THEME_TEXT_MUTED, bg=THEME_SURFACE).pack(side=tk.LEFT, padx=(8, 0), pady=(2, 0))
+
+    def _collapsible_card_title(self, card, title, subtitle=None):
+        """Add a clickable title bar + separator. Returns (arrow, body_frame).
+        The body_frame is initially packed; call body_frame.pack_forget() to collapse
+        and body_frame.pack(fill=tk.X, after=separator) to expand.
+        """
+        title_frame = tk.Frame(card, bg=THEME_SURFACE, cursor="hand2")
+        title_frame.pack(anchor=tk.W, fill=tk.X)
+
+        arrow = tk.Label(title_frame, text="▼", font=("Consolas", 10, "bold"),
+                         fg=THEME_TEXT, bg=THEME_SURFACE)
+        arrow.pack(side=tk.LEFT, padx=(0, 6))
+
+        tk.Label(title_frame, text=title, font=("Consolas", 13, "bold"),
+                fg=THEME_TEXT, bg=THEME_SURFACE).pack(side=tk.LEFT)
+        if subtitle:
+            tk.Label(title_frame, text=subtitle, font=("Consolas", 9),
+                    fg=THEME_TEXT_MUTED, bg=THEME_SURFACE).pack(side=tk.LEFT, padx=(8, 0), pady=(2, 0))
+
+        # separator — we need to keep a named reference for re-packing body after it
+        sep = tk.Frame(card, bg=THEME_BORDER, height=1)
+        sep.pack(fill=tk.X, pady=(6, 8))
+
+        body_frame = tk.Frame(card, bg=THEME_SURFACE)
+        body_frame.pack(fill=tk.X)
+
+        # Store toggle helpers on the body frame itself so the caller can use them
+        body_frame._sep = sep
+        body_frame._arrow = arrow
+        body_frame._collapsed = False
+
+        def _toggle():
+            if body_frame._collapsed:
+                body_frame.pack(fill=tk.X, after=sep)
+                arrow.config(text="▼")
+                body_frame._collapsed = False
+            else:
+                body_frame.pack_forget()
+                arrow.config(text="▶")
+                body_frame._collapsed = True
+
+        for w in (title_frame, arrow):
+            w.bind("<Button-1>", lambda e: _toggle())
+
+        body_frame.toggle = _toggle
+        return body_frame
+
+    def _create_collapsible_card(self, parent, title, subtitle=None):
+        """Create a card whose contents can be collapsed/expanded.
+        Returns (card_frame, body_frame) — pack all content into body_frame.
+        The card is automatically packed into *parent* with fill=tk.X.
+        """
+        card = self._create_card(parent)
+        card.pack(fill=tk.X, pady=(0, 12))  # <-- the card itself must be placed!
+        body = self._collapsible_card_title(card, title, subtitle)
+        if not hasattr(self, "_collapsible_cards"):
+            self._collapsible_cards = []
+        self._collapsible_cards.append(body)
+        return card, body
 
     def _create_section_label(self, parent, text):
         """Create a small section label"""
@@ -838,16 +1127,56 @@ class JiraReportApp:
         # === Main Content Area (Report Page) ===
         main_content = self.page_report
 
+        # --- Hero row with expand/collapse all ---
         hero = tk.Frame(main_content, bg=THEME_BG)
-        hero.pack(fill=tk.X, pady=(0, 16))
-        tk.Label(hero, text=self.t("report_title"),
+        hero.pack(fill=tk.X, pady=(0, 8))
+
+        hero_text = tk.Frame(hero, bg=THEME_BG)
+        hero_text.pack(side=tk.LEFT)
+        tk.Label(hero_text, text=self.t("report_title"),
                 font=("Consolas", 22, "bold"),
                 fg=THEME_TEXT, bg=THEME_BG).pack(anchor=tk.W)
-        tk.Label(hero, text=self.t("report_subtitle"),
+        tk.Label(hero_text, text=self.t("report_subtitle"),
                 font=("Consolas", 10),
                 fg=THEME_TEXT_SECONDARY, bg=THEME_BG).pack(anchor=tk.W, pady=(4, 0))
 
-        work_area = tk.Frame(main_content, bg=THEME_BG)
+        hero_btns = tk.Frame(hero, bg=THEME_BG)
+        hero_btns.pack(side=tk.RIGHT, anchor=tk.S)
+        tk.Button(hero_btns, text=self.t("expand_all"), command=self._expand_all_cards,
+                 bg=THEME_SURFACE, fg=THEME_TEXT_SECONDARY,
+                 activebackground=THEME_SURFACE_HOVER, relief="flat",
+                 font=("Consolas", 9), cursor="hand2", padx=8, pady=1).pack(side=tk.LEFT, padx=2)
+        tk.Button(hero_btns, text=self.t("collapse_all"), command=self._collapse_all_cards,
+                 bg=THEME_SURFACE, fg=THEME_TEXT_SECONDARY,
+                 activebackground=THEME_SURFACE_HOVER, relief="flat",
+                 font=("Consolas", 9), cursor="hand2", padx=8, pady=1).pack(side=tk.LEFT, padx=2)
+
+        # --- Scrollable work area ---
+        self._report_canvas = tk.Canvas(main_content, bg=THEME_BG, highlightthickness=0)
+        canvas = self._report_canvas
+        scrollbar = tk.Scrollbar(main_content, orient=tk.VERTICAL, command=canvas.yview)
+        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+        canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        canvas.configure(yscrollcommand=scrollbar.set)
+
+        scroll_inner = tk.Frame(canvas, bg=THEME_BG)
+        inner_id = canvas.create_window((0, 0), window=scroll_inner, anchor=tk.NW)
+
+        def _scrolling_configure(event):
+            canvas.configure(scrollregion=canvas.bbox("all"))
+        scroll_inner.bind("<Configure>", _scrolling_configure)
+
+        def _canvas_resize(event):
+            canvas.itemconfig(inner_id, width=event.width)
+            canvas.configure(scrollregion=canvas.bbox("all"))
+        canvas.bind("<Configure>", _canvas_resize)
+
+        def _on_mousewheel(event):
+            canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
+        canvas.bind("<Enter>", lambda e: canvas.bind_all("<MouseWheel>", _on_mousewheel))
+        canvas.bind("<Leave>", lambda e: canvas.unbind_all("<MouseWheel>"))
+
+        work_area = tk.Frame(scroll_inner, bg=THEME_BG)
         work_area.pack(fill=tk.BOTH, expand=True)
         left_col = tk.Frame(work_area, bg=THEME_BG)
         left_col.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(0, 8))
@@ -855,13 +1184,27 @@ class JiraReportApp:
         right_col.pack(side=tk.LEFT, fill=tk.BOTH, padx=(8, 0))
         right_col.pack_propagate(False)
 
+        # Collapsible cards for the report page live in a separate list
+        report_collapsible = []
+
+        def _add_report_card(parent, title, subtitle=None, highlight=False, **pack_kw):
+            """Create a collapsible card and register it for expand/collapse all."""
+            card = self._create_card(parent, highlight=highlight)
+            card.pack(**pack_kw)
+            body = self._collapsible_card_title(card, title, subtitle)
+            report_collapsible.append(body)
+            # Also register in the main collapsible list so expand/collapse_all works
+            if not hasattr(self, "_collapsible_cards"):
+                self._collapsible_cards = []
+            self._collapsible_cards.append(body)
+            return card, body
+
         # === Card: Date Range ===
-        date_card = self._create_card(left_col)
-        date_card.pack(fill=tk.X, pady=(0, 12))
+        date_card, date_body = _add_report_card(left_col,
+            self.t("date_range"), self.t("date_range_subtitle"),
+            fill=tk.X, pady=(0, 12))
 
-        self._add_card_title(date_card, self.t("date_range"), self.t("date_range_subtitle"))
-
-        date_row = tk.Frame(date_card, bg=THEME_SURFACE)
+        date_row = tk.Frame(date_body, bg=THEME_SURFACE)
         date_row.pack(fill=tk.X)
 
         self.start_date_var = tk.StringVar()
@@ -876,8 +1219,7 @@ class JiraReportApp:
         ttk.Entry(date_row, textvariable=self.end_date_var, width=12,
                  style="Modern.TEntry", font=("Consolas", 11)).pack(side=tk.LEFT, fill=tk.X, expand=True)
 
-        # Quick date buttons
-        quick_row = tk.Frame(date_card, bg=THEME_SURFACE)
+        quick_row = tk.Frame(date_body, bg=THEME_SURFACE)
         quick_row.pack(fill=tk.X, pady=(10, 0))
 
         for txt, cmd in [(self.t("this_week"), lambda: self.set_quick_date("week")),
@@ -890,24 +1232,20 @@ class JiraReportApp:
                            font=("Consolas", 10), cursor="hand2", padx=10, pady=4)
             btn.pack(side=tk.LEFT, padx=(0, 6))
 
-        # Default dates
         today = datetime.date.today()
         week_ago = today - timedelta(days=7)
         self.start_date_var.set(week_ago.strftime("%Y-%m-%d"))
         self.end_date_var.set(today.strftime("%Y-%m-%d"))
 
-        # Auto-update filepath when dates change
         self.start_date_var.trace_add("write", lambda *_: self._update_filepath())
         self.end_date_var.trace_add("write", lambda *_: self._update_filepath())
 
         # === Card: Filters ===
-        filters_card = self._create_card(left_col)
-        filters_card.pack(fill=tk.X, pady=(0, 12))
+        filters_card, filters_body = _add_report_card(left_col,
+            self.t("filters"), self.t("filters_subtitle"),
+            fill=tk.X, pady=(0, 12))
 
-        self._add_card_title(filters_card, self.t("filters"), self.t("filters_subtitle"))
-
-        # Status
-        status_row = tk.Frame(filters_card, bg=THEME_SURFACE)
+        status_row = tk.Frame(filters_body, bg=THEME_SURFACE)
         status_row.pack(fill=tk.X, pady=(0, 10))
 
         self._create_section_label(status_row, self.t("status")).pack(side=tk.LEFT)
@@ -916,22 +1254,20 @@ class JiraReportApp:
                            ["ALL", "WAIT FAE INFO", "WORKED AROUND", "WORKING",
                             "CLOSED", "RESOLVED", "WAIT 3RD PARTY"], width=18).pack(side=tk.LEFT, padx=(8, 0), fill=tk.X, expand=True)
 
-        # Columns
-        col_row = tk.Frame(filters_card, bg=THEME_SURFACE)
+        col_row = tk.Frame(filters_body, bg=THEME_SURFACE)
         col_row.pack(fill=tk.X)
 
         self._create_section_label(col_row, self.t("columns")).pack(side=tk.LEFT)
         ttk.Entry(col_row, textvariable=self.column_order_var,
                  style="Modern.TEntry", font=("Consolas", 11)).pack(side=tk.LEFT, padx=(8, 0), fill=tk.X, expand=True)
-        self._create_hint_label(filters_card, self.t("column_order_hint")).pack(fill=tk.X, pady=(6, 0))
+        self._create_hint_label(filters_body, self.t("column_order_hint")).pack(fill=tk.X, pady=(6, 0))
 
         # === Card: Output ===
-        output_card = self._create_card(left_col)
-        output_card.pack(fill=tk.X, pady=(0, 12))
+        output_card, output_body = _add_report_card(left_col,
+            self.t("output"), self.t("output_subtitle"),
+            fill=tk.X, pady=(0, 12))
 
-        self._add_card_title(output_card, self.t("output"), self.t("output_subtitle"))
-
-        output_row = tk.Frame(output_card, bg=THEME_SURFACE)
+        output_row = tk.Frame(output_body, bg=THEME_SURFACE)
         output_row.pack(fill=tk.X)
 
         self.filepath_var = tk.StringVar()
@@ -946,11 +1282,12 @@ class JiraReportApp:
                  borderwidth=1,
                  font=("Consolas", 10), cursor="hand2", padx=10, pady=4).pack(side=tk.LEFT, padx=(8, 0))
 
-        # === Alignment Options ===
-        align_card = self._create_card(left_col)
-        align_card.pack(fill=tk.X, pady=(0, 16))
+        # === Card: Alignment ===
+        align_card, align_body = _add_report_card(left_col,
+            self.t("header") + " / " + self.t("cell") + " " + self.t("key_issue_red"),
+            fill=tk.X, pady=(0, 12))
 
-        align_row = tk.Frame(align_card, bg=THEME_SURFACE)
+        align_row = tk.Frame(align_body, bg=THEME_SURFACE)
         align_row.pack(fill=tk.X)
 
         self._create_section_label(align_row, self.t("header")).pack(side=tk.LEFT)
@@ -963,45 +1300,45 @@ class JiraReportApp:
                              self.key_issue_highlight_var).pack(side=tk.LEFT)
 
         # === Card: Progress Content ===
-        progress_card = self._create_card(right_col)
-        progress_card.pack(fill=tk.X, pady=(0, 12))
+        progress_card, progress_body = _add_report_card(right_col,
+            self.t("progress_content"), self.t("progress_content_subtitle"),
+            fill=tk.X, pady=(0, 12))
 
-        self._add_card_title(progress_card, self.t("progress_content"), self.t("progress_content_subtitle"))
-
-        self._create_checkbox(progress_card, self.t("fetch_latest_comment"),
+        self._create_checkbox(progress_body, self.t("fetch_latest_comment"),
                              self.fetch_comment_var, command=self.on_fetch_comment_toggle).pack(anchor=tk.W, pady=(0, 8))
 
-        self._create_checkbox(progress_card, self.t("prefix_timestamp"),
+        self._create_checkbox(progress_body, self.t("prefix_timestamp"),
                              self.comment_timestamp_prefix_var, command=self.on_comment_timestamp_toggle).pack(anchor=tk.W)
 
         # === Card: AI Summary (Highlighted) ===
-        ai_card = self._create_card(right_col, highlight=True)
-        ai_card.pack(fill=tk.X, pady=(0, 12))
+        ai_card, ai_body = _add_report_card(right_col,
+            self.t("ai_summary"), highlight=True,
+            fill=tk.X, pady=(0, 12))
 
-        # AI card header with glow effect
-        ai_header = tk.Frame(ai_card, bg=THEME_SURFACE)
+        ai_header = tk.Frame(ai_body, bg=THEME_SURFACE)
         ai_header.pack(fill=tk.X, pady=(0, 12))
 
         tk.Label(ai_header, text=self.t("ai_summary"), font=("Consolas", 13, "bold"),
                 fg=THEME_PRIMARY, bg=THEME_SURFACE).pack(side=tk.LEFT)
-        tk.Label(ai_header, text=self.t("powered_by_deepseek"), font=("Consolas", 9),
+        self.powered_by_label = tk.Label(ai_header, text=self.t("powered_by", provider="DeepSeek"), font=("Consolas", 9),
                 fg=THEME_TEXT_MUTED, bg=THEME_SURFACE).pack(side=tk.LEFT, padx=(8, 0), pady=(2, 0))
 
-        # AI options
-        self._create_checkbox(ai_card, self.t("enable_ai_summary"),
+        self._create_checkbox(ai_body, self.t("enable_ai_summary"),
                              self.use_ai_summary_var, command=self.on_ai_summary_toggle,
                              color=THEME_PRIMARY).pack(anchor=tk.W, pady=(0, 8))
 
-        # AI Config (nested)
-        self.ai_config_outer = tk.Frame(ai_card, bg=THEME_SURFACE_RAISED, padx=10, pady=8)
+        self.ai_config_outer = tk.Frame(ai_body, bg=THEME_SURFACE_RAISED, padx=10, pady=8)
         self.ai_config_outer.pack(fill=tk.X, pady=(0, 8))
 
         model_row = tk.Frame(self.ai_config_outer, bg=THEME_SURFACE_RAISED)
         model_row.pack(fill=tk.X, pady=(0, 6))
 
         self._create_section_label(model_row, self.t("model")).pack(side=tk.LEFT)
-        self._create_combo(model_row, self.ai_model_var,
-                           ["deepseek-chat", "deepseek-coder", "deepseek-v4-flash", "deepseek-v4-pro"],
+        from src.ai_providers import get_models as _get_models2
+        _rep_models = (self._get_tp_model_list() if self.saved_api_mode == "third_party"
+                       else _get_models2(self.saved_ai_provider) or [""])
+        self.report_model_combo = self._create_combo(model_row, self.ai_model_var,
+                           _rep_models,
                            width=18).pack(side=tk.LEFT, padx=(8, 0), fill=tk.X, expand=True)
 
         batch_row = tk.Frame(self.ai_config_outer, bg=THEME_SURFACE_RAISED)
@@ -1100,6 +1437,7 @@ class JiraReportApp:
         self.on_ai_summary_toggle()
         self.on_fetch_comment_toggle()
         self._update_filepath()
+        self._on_provider_changed()
 
     def set_quick_date(self, period):
         today = datetime.date.today()
@@ -1191,19 +1529,59 @@ class JiraReportApp:
                 child.configure(bg=bg_active, fg=THEME_PRIMARY)
 
     def _setup_settings_page(self):
-        """Setup the Settings page with configuration options"""
-        # Title
-        tk.Label(self.page_settings, text=self.t("settings"),
+        """Setup the Settings page with collapsible cards and scrollbar."""
+        self._collapsible_cards = []
+
+        # --- Header row ---
+        header = tk.Frame(self.page_settings, bg=THEME_BG)
+        header.pack(fill=tk.X, pady=(0, 8))
+
+        tk.Label(header, text=self.t("settings"),
                 font=("Consolas", 18, "bold"),
-                fg=THEME_TEXT, bg=THEME_BG).pack(anchor=tk.W, pady=(0, 16))
+                fg=THEME_TEXT, bg=THEME_BG).pack(side=tk.LEFT)
 
-        # === UI Theme Card ===
-        theme_card = self._create_card(self.page_settings)
-        theme_card.pack(fill=tk.X, pady=(0, 12))
+        btn_bar = tk.Frame(header, bg=THEME_BG)
+        btn_bar.pack(side=tk.RIGHT)
+        tk.Button(btn_bar, text=self.t("expand_all"), command=self._expand_all_cards,
+                 bg=THEME_SURFACE, fg=THEME_TEXT_SECONDARY,
+                 activebackground=THEME_SURFACE_HOVER, relief="flat",
+                 font=("Consolas", 9), cursor="hand2", padx=8, pady=1).pack(side=tk.LEFT, padx=2)
+        tk.Button(btn_bar, text=self.t("collapse_all"), command=self._collapse_all_cards,
+                 bg=THEME_SURFACE, fg=THEME_TEXT_SECONDARY,
+                 activebackground=THEME_SURFACE_HOVER, relief="flat",
+                 font=("Consolas", 9), cursor="hand2", padx=8, pady=1).pack(side=tk.LEFT, padx=2)
 
-        self._add_card_title(theme_card, self.t("ui_preferences"), self.t("ui_preferences_subtitle"))
+        # --- Scrollable area ---
+        canvas = tk.Canvas(self.page_settings, bg=THEME_BG, highlightthickness=0)
+        scrollbar = tk.Scrollbar(self.page_settings, orient=tk.VERTICAL,
+                                command=canvas.yview)
+        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+        canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        canvas.configure(yscrollcommand=scrollbar.set)
 
-        row = tk.Frame(theme_card, bg=THEME_SURFACE)
+        inner = tk.Frame(canvas, bg=THEME_BG)
+        inner_id = canvas.create_window((0, 0), window=inner, anchor=tk.NW)
+
+        def _scrolling_configure(event):
+            canvas.configure(scrollregion=canvas.bbox("all"))
+        inner.bind("<Configure>", _scrolling_configure)
+
+        def _canvas_resize(event):
+            canvas.itemconfig(inner_id, width=event.width)
+            canvas.configure(scrollregion=canvas.bbox("all"))
+        canvas.bind("<Configure>", _canvas_resize)
+
+        def _on_mousewheel(event):
+            canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
+        # Bind mousewheel only when canvas has focus or on Linux
+        canvas.bind("<Enter>", lambda e: canvas.bind_all("<MouseWheel>", _on_mousewheel))
+        canvas.bind("<Leave>", lambda e: canvas.unbind_all("<MouseWheel>"))
+
+        # === UI Preferences Card ===
+        _, theme_body = self._create_collapsible_card(inner,
+            self.t("ui_preferences"), self.t("ui_preferences_subtitle"))
+
+        row = tk.Frame(theme_body, bg=THEME_SURFACE)
         row.pack(fill=tk.X, pady=(0, 8))
         tk.Label(row, text=self.t("language"), font=("Consolas", 10),
                 fg=THEME_TEXT_SECONDARY, bg=THEME_SURFACE).pack(side=tk.LEFT)
@@ -1213,7 +1591,7 @@ class JiraReportApp:
         language_combo.pack(side=tk.LEFT, padx=(8, 0), fill=tk.X, expand=True)
         language_combo.bind("<<ComboboxSelected>>", self.on_language_change)
 
-        row = tk.Frame(theme_card, bg=THEME_SURFACE)
+        row = tk.Frame(theme_body, bg=THEME_SURFACE)
         row.pack(fill=tk.X)
         tk.Label(row, text=self.t("color_style"), font=("Consolas", 10),
                 fg=THEME_TEXT_SECONDARY, bg=THEME_SURFACE).pack(side=tk.LEFT)
@@ -1224,21 +1602,16 @@ class JiraReportApp:
         theme_combo.bind("<<ComboboxSelected>>", self.on_theme_change)
 
         # === Jira Connection Card ===
-        conn_card = self._create_card(self.page_settings)
-        conn_card.pack(fill=tk.X, pady=(0, 12))
+        _, conn_body = self._create_collapsible_card(inner, self.t("jira_login"))
 
-        self._add_card_title(conn_card, self.t("jira_login"))
-
-        # Username
-        row = tk.Frame(conn_card, bg=THEME_SURFACE)
+        row = tk.Frame(conn_body, bg=THEME_SURFACE)
         row.pack(fill=tk.X, pady=(0, 8))
         tk.Label(row, text=self.t("username"), font=("Consolas", 10),
                 fg=THEME_TEXT_SECONDARY, bg=THEME_SURFACE).pack(side=tk.LEFT)
         ttk.Entry(row, textvariable=self.username_var,
                  style="Modern.TEntry", font=("Consolas", 10)).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(8, 0))
 
-        # Password
-        row = tk.Frame(conn_card, bg=THEME_SURFACE)
+        row = tk.Frame(conn_body, bg=THEME_SURFACE)
         row.pack(fill=tk.X, pady=(0, 8))
         tk.Label(row, text=self.t("password"), font=("Consolas", 10),
                 fg=THEME_TEXT_SECONDARY, bg=THEME_SURFACE).pack(side=tk.LEFT)
@@ -1246,12 +1619,10 @@ class JiraReportApp:
                                         style="Modern.TEntry", font=("Consolas", 10))
         self.password_entry.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(8, 0))
 
-        # Remember checkbox
-        self._create_checkbox(conn_card, self.t("remember_credentials"),
+        self._create_checkbox(conn_body, self.t("remember_credentials"),
                               self.remember_var).pack(anchor=tk.W, pady=(0, 8))
 
-        # Login buttons
-        btn_row = tk.Frame(conn_card, bg=THEME_SURFACE)
+        btn_row = tk.Frame(conn_body, bg=THEME_SURFACE)
         btn_row.pack(fill=tk.X)
         self.login_btn = ttk.Button(btn_row, text=self.t("login"), command=self.login,
                                    width=10, style="Modern.TButton")
@@ -1260,47 +1631,92 @@ class JiraReportApp:
                                     state=tk.DISABLED, width=10, style="Secondary.TButton")
         self.logout_btn.pack(side=tk.LEFT, padx=(8, 0))
 
-        self.login_status_label = tk.Label(conn_card, text=self.t("not_connected"),
+        self.login_status_label = tk.Label(conn_body, text=self.t("not_connected"),
                                           font=("Consolas", 9),
                                           fg=THEME_ERROR, bg=THEME_SURFACE)
         self.login_status_label.pack(anchor=tk.W, pady=(8, 0))
 
         # === AI Settings Card ===
-        ai_card = self._create_card(self.page_settings)
-        ai_card.pack(fill=tk.X, pady=(0, 12))
+        _, ai_body = self._create_collapsible_card(inner, self.t("ai_settings"))
 
-        self._add_card_title(ai_card, self.t("ai_settings"))
-
-        row = tk.Frame(ai_card, bg=THEME_SURFACE)
-        row.pack(fill=tk.X, pady=(0, 8))
-        tk.Label(row, text="API Key:", font=("Consolas", 10),
+        row = tk.Frame(ai_body, bg=THEME_SURFACE)
+        row.pack(fill=tk.X, pady=(4, 8))
+        tk.Label(row, text=self.t("api_mode"), font=("Consolas", 10),
                 fg=THEME_TEXT_SECONDARY, bg=THEME_SURFACE).pack(side=tk.LEFT)
-        ttk.Entry(row, textvariable=self.api_key_var, show="*",
-                 style="Modern.TEntry", font=("Consolas", 10)).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(8, 0))
+        self.api_mode_official_rb = tk.Radiobutton(row, text=self.t("api_mode_official"),
+                variable=self.api_mode_var, value="official",
+                font=("Consolas", 10), fg=THEME_TEXT_SECONDARY, bg=THEME_SURFACE,
+                activebackground=THEME_SURFACE, selectcolor=THEME_SURFACE,
+                command=self._on_api_mode_changed)
+        self.api_mode_official_rb.pack(side=tk.LEFT, padx=(8, 4))
+        self.api_mode_tp_rb = tk.Radiobutton(row, text=self.t("api_mode_third_party"),
+                variable=self.api_mode_var, value="third_party",
+                font=("Consolas", 10), fg=THEME_TEXT_SECONDARY, bg=THEME_SURFACE,
+                activebackground=THEME_SURFACE, selectcolor=THEME_SURFACE,
+                command=self._on_api_mode_changed)
+        self.api_mode_tp_rb.pack(side=tk.LEFT)
 
-        row = tk.Frame(ai_card, bg=THEME_SURFACE)
+        row = tk.Frame(ai_body, bg=THEME_SURFACE)
+        row.pack(fill=tk.X, pady=(0, 8))
+        tk.Label(row, text=self.t("provider"), font=("Consolas", 10),
+                fg=THEME_TEXT_SECONDARY, bg=THEME_SURFACE).pack(side=tk.LEFT)
+        self.provider_combo = ttk.Combobox(row, textvariable=self.ai_provider_var, width=18, state="readonly",
+                    style="Modern.TCombobox", font=("Consolas", 10),
+                    values=["deepseek", "openai", "anthropic", "custom"])
+        self.provider_combo.pack(side=tk.LEFT, padx=(8, 0), fill=tk.X, expand=True)
+        self.provider_combo.bind("<<ComboboxSelected>>", self._on_provider_changed)
+
+        self.ai_key_row = tk.Frame(ai_body, bg=THEME_SURFACE)
+        self.ai_key_row.pack(fill=tk.X, pady=(0, 8))
+        from src.ai_providers import get_label as _get_label, get_models as _get_models
+        self._ai_key_label_text = tk.StringVar(value=self._make_key_label())
+        self.ai_key_label = tk.Label(self.ai_key_row, textvariable=self._ai_key_label_text,
+                font=("Consolas", 10),
+                fg=THEME_TEXT_SECONDARY, bg=THEME_SURFACE)
+        self.ai_key_label.pack(side=tk.LEFT)
+        self.ai_key_entry = ttk.Entry(self.ai_key_row, textvariable=self.api_key_var, show="*",
+                 style="Modern.TEntry", font=("Consolas", 10))
+        self.ai_key_entry.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(8, 0))
+
+        row = tk.Frame(ai_body, bg=THEME_SURFACE)
         row.pack(fill=tk.X, pady=(0, 8))
         tk.Label(row, text=self.t("model"), font=("Consolas", 10),
                 fg=THEME_TEXT_SECONDARY, bg=THEME_SURFACE).pack(side=tk.LEFT)
-        ttk.Combobox(row, textvariable=self.ai_model_var, width=18, state="readonly",
+        model_state = "normal" if (self.saved_ai_provider == "custom" or self.saved_api_mode == "third_party") else "readonly"
+        _initial_models = (self._get_tp_model_list() if self.saved_api_mode == "third_party"
+                          else _get_models(self.saved_ai_provider))
+        self.model_combo = ttk.Combobox(row, textvariable=self.ai_model_var, width=18,
+                    state=model_state,
                     style="Modern.TCombobox", font=("Consolas", 10),
-                    values=["deepseek-chat", "deepseek-coder", "deepseek-v4-flash", "deepseek-v4-pro"]).pack(side=tk.LEFT, padx=(8, 0), fill=tk.X, expand=True)
+                    values=_initial_models)
+        self.model_combo.pack(side=tk.LEFT, padx=(8, 0), fill=tk.X, expand=True)
 
-        # === Default Report Settings Card ===
-        report_card = self._create_card(self.page_settings)
-        report_card.pack(fill=tk.X, pady=(0, 12))
+        self.custom_endpoint_row = tk.Frame(ai_body, bg=THEME_SURFACE)
+        self._endpoint_label_widget = tk.Label(self.custom_endpoint_row,
+                text=self._make_endpoint_label(), font=("Consolas", 10),
+                fg=THEME_TEXT_SECONDARY, bg=THEME_SURFACE)
+        self._endpoint_label_widget.pack(side=tk.LEFT)
+        ttk.Entry(self.custom_endpoint_row, textvariable=self.custom_endpoint_var,
+                 style="Modern.TEntry", font=("Consolas", 10)).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(8, 0))
 
-        self._add_card_title(report_card, self.t("default_report_settings"))
+        if self.saved_api_mode == "third_party" or self.saved_ai_provider == "custom":
+            self.custom_endpoint_row.pack(fill=tk.X, pady=(0, 8), before=self.model_combo.master)
+        else:
+            self.custom_endpoint_row.pack_forget()
+        self._create_hint_label(ai_body, self.t("custom_endpoint_hint")).pack(fill=tk.X, pady=(0, 8))
 
-        row = tk.Frame(report_card, bg=THEME_SURFACE)
+        # === Default Report Card ===
+        _, report_body = self._create_collapsible_card(inner, self.t("default_report_settings"))
+
+        row = tk.Frame(report_body, bg=THEME_SURFACE)
         row.pack(fill=tk.X, pady=(0, 8))
         tk.Label(row, text=self.t("columns"), font=("Consolas", 10),
                 fg=THEME_TEXT_SECONDARY, bg=THEME_SURFACE).pack(side=tk.LEFT)
         ttk.Entry(row, textvariable=self.column_order_var,
                  style="Modern.TEntry", font=("Consolas", 10)).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(8, 0))
-        self._create_hint_label(report_card, self.t("column_order_hint")).pack(fill=tk.X, pady=(0, 8))
+        self._create_hint_label(report_body, self.t("column_order_hint")).pack(fill=tk.X, pady=(0, 8))
 
-        row = tk.Frame(report_card, bg=THEME_SURFACE)
+        row = tk.Frame(report_body, bg=THEME_SURFACE)
         row.pack(fill=tk.X, pady=(0, 8))
         tk.Label(row, text=self.t("header_align"), font=("Consolas", 10),
                 fg=THEME_TEXT_SECONDARY, bg=THEME_SURFACE).pack(side=tk.LEFT)
@@ -1308,7 +1724,7 @@ class JiraReportApp:
                     style="Modern.TCombobox", font=("Consolas", 10),
                     values=["left", "center", "right"]).pack(side=tk.LEFT, padx=(8, 0))
 
-        row = tk.Frame(report_card, bg=THEME_SURFACE)
+        row = tk.Frame(report_body, bg=THEME_SURFACE)
         row.pack(fill=tk.X, pady=(0, 8))
         tk.Label(row, text=self.t("cell_align"), font=("Consolas", 10),
                 fg=THEME_TEXT_SECONDARY, bg=THEME_SURFACE).pack(side=tk.LEFT)
@@ -1316,32 +1732,36 @@ class JiraReportApp:
                     style="Modern.TCombobox", font=("Consolas", 10),
                     values=["left", "center", "right"]).pack(side=tk.LEFT, padx=(8, 0))
 
-        self._create_checkbox(report_card, self.t("highlight_key_issues"),
+        self._create_checkbox(report_body, self.t("highlight_key_issues"),
                               self.key_issue_highlight_var).pack(anchor=tk.W, pady=(0, 8))
 
-        # Save button
-        tk.Button(report_card, text=self.t("save_settings"), command=self._save_settings,
+        tk.Button(report_body, text=self.t("save_settings"), command=self._save_settings,
                  bg=THEME_PRIMARY, fg=THEME_PRIMARY_TEXT,
                  activebackground=THEME_PRIMARY_HOVER, relief="flat",
                  font=("Consolas", 10, "bold"), cursor="hand2", padx=16, pady=6).pack(anchor=tk.E)
 
+    def _expand_all_cards(self):
+        """Expand all collapsible cards."""
+        for body in getattr(self, "_collapsible_cards", []):
+            if body._collapsed:
+                body.toggle()
+
+    def _collapse_all_cards(self):
+        """Collapse all collapsible cards."""
+        for body in getattr(self, "_collapsible_cards", []):
+            if not body._collapsed:
+                body.toggle()
+
     def _save_settings(self):
-        """Save all settings to config file"""
+        """Save all settings to config file, preserving existing .env keys."""
         try:
-            data = {
-                "username": self.username_var.get(),
-                "password": self.password_var.get() if self.remember_var.get() else "",
-                "deepseek_api_key": self.api_key_var.get(),
-                "ai_model": self.ai_model_var.get(),
-                "column_order": self._normalize_column_order(self.column_order_var.get()),
-                "key_issue_highlight": bool(self.key_issue_highlight_var.get()),
-                "comment_timestamp_prefix": bool(self.comment_timestamp_prefix_var.get()),
-                "theme": self.theme_var.get(),
-                "language": self.language_code,
-                "last_save_dir": self.last_save_dir
-            }
-            with open(self.config_file, "w") as f:
-                json.dump(data, f)
+            existing = {}
+            if os.path.exists(self.config_file):
+                existing = load_env(self.config_file)
+            data = self._build_save_data(existing)
+            if not self.remember_var.get():
+                data["JIRA_PASSWORD"] = ""
+            save_env(self.config_file, data)
             messagebox.showinfo(self.t("save_success_title"), self.t("save_success"))
         except Exception as e:
             messagebox.showerror(self.t("save_failed_title"), self.t("save_failed", error=e))
@@ -1362,6 +1782,15 @@ class JiraReportApp:
 
     def on_ai_summary_toggle(self):
         if self.use_ai_summary_var.get():
+            # Require an API key before enabling AI summary
+            if not self._has_any_ai_key():
+                self.use_ai_summary_var.set(False)
+                messagebox.showwarning(
+                    self.t("ai_key_missing_title"),
+                    self.t("ai_key_missing_message"),
+                )
+                self._show_page("settings")
+                return
             self.ai_config_outer.pack(fill=tk.X, pady=(0, 8))
             self.fetch_comment_var.set(False)
         else:
@@ -1374,6 +1803,255 @@ class JiraReportApp:
 
     def on_batch_mode_toggle(self):
         self.save_ui_preferences()
+
+    def _get_tp_model_list(self):
+        """Return dropdown values for third-party model selector.
+        Reads directly from .env so it stays current after saves.
+        """
+        if os.path.exists(self.config_file):
+            data = load_env(self.config_file)
+            _tp_keys = ("ANTHROPIC_MODEL", "ANTHROPIC_DEFAULT_OPUS_MODEL",
+                       "ANTHROPIC_DEFAULT_SONNET_MODEL", "ANTHROPIC_DEFAULT_HAIKU_MODEL",
+                       "CLAUDE_CODE_SUBAGENT_MODEL")
+            _seen = set()
+            result = []
+            for k in _tp_keys:
+                v = data.get(k, "").strip()
+                if v and v not in _seen:
+                    _seen.add(v)
+                    result.append(v)
+            if result:
+                return result
+        # Fallback: use runtime cached list
+        return self.tp_model_list or [self.tp_model] if self.tp_model else [""]
+
+    def _make_key_label(self, provider=None):
+        """Return the correct key label for the current mode + provider."""
+        if self.api_mode_var.get() == "third_party":
+            return self.t("tp_auth_token_label")
+        if provider is None:
+            provider = self.ai_provider_var.get()
+        from src.ai_providers import get_label as _gl
+        return self.t("api_key_label", provider=_gl(provider))
+
+    def _make_endpoint_label(self):
+        """Return the correct endpoint label for the current mode."""
+        if self.api_mode_var.get() == "third_party":
+            return self.t("tp_base_url_label")
+        return self.t("custom_endpoint")
+
+    def _on_api_mode_changed(self):
+        """Swap UI between official API and third-party proxy mode."""
+        mode = self.api_mode_var.get()
+        provider = self.ai_provider_var.get()
+
+        # --- Save current field values to the old mode's storage ---
+        if mode == "third_party":
+            # Switching FROM official TO third-party: save official values
+            self.api_keys[provider] = self.api_key_var.get()
+        else:
+            # Switching FROM third-party TO official: save third-party values
+            self.tp_auth_token = self.api_key_var.get()
+            self.tp_base_url = self.custom_endpoint_var.get()
+            self.tp_model = self.ai_model_var.get()
+
+        # --- Load new mode's values into the UI ---
+        if mode == "third_party":
+            # Load third-party values (global, not per-provider)
+            self.api_key_var.set(self.tp_auth_token)
+            self.custom_endpoint_var.set(self.tp_base_url)
+            self.ai_model_var.set(self.tp_model or self.saved_ai_model)
+        else:
+            # Load official values
+            self.api_key_var.set(self.api_keys.get(provider, ""))
+            self.custom_endpoint_var.set(self.saved_custom_endpoint if provider == "custom" else "")
+            # Don't reset model when switching to official — keep current
+
+        # --- Update labels ---
+        self._ai_key_label_text.set(self._make_key_label(provider))
+        self._endpoint_label_widget.config(text=self._make_endpoint_label())
+
+        # --- Show/hide endpoint row ---
+        if mode == "third_party":
+            if not self.custom_endpoint_row.winfo_ismapped():
+                self.custom_endpoint_row.pack(fill=tk.X, pady=(0, 8), before=self.model_combo.master)
+        else:
+            if provider == "custom":
+                if not self.custom_endpoint_row.winfo_ismapped():
+                    self.custom_endpoint_row.pack(fill=tk.X, pady=(0, 8), before=self.model_combo.master)
+            else:
+                self.custom_endpoint_row.pack_forget()
+
+        # --- Model combo: update values and state ---
+        from src.ai_providers import get_provider_spec, get_models
+        if mode == "third_party":
+            tp_models = self._get_tp_model_list()
+            self.model_combo.config(values=tp_models, state="normal")
+        else:
+            spec = get_provider_spec(provider)
+            models = spec["models"] if spec else []
+            self.model_combo.config(values=models if models else [""],
+                                    state="normal" if provider == "custom" else "readonly")
+
+        # Sync Report-page model combo too
+        if hasattr(self, "report_model_combo") and self.report_model_combo is not None:
+            try:
+                if mode == "third_party":
+                    self.report_model_combo.config(values=self._get_tp_model_list())
+                else:
+                    self.report_model_combo.config(values=get_models(provider) or [""])
+            except tk.TclError:
+                pass
+
+        self.save_ui_preferences()
+
+    def _on_api_key_changed(self, *args):
+        """Sync typed API key / auth token to the correct backing store."""
+        provider = self.ai_provider_var.get()
+        if self.api_mode_var.get() == "third_party":
+            self.tp_auth_token = self.api_key_var.get()
+        else:
+            if provider in self.api_keys:
+                self.api_keys[provider] = self.api_key_var.get()
+
+    def _on_provider_changed(self, event=None):
+        from src.ai_providers import get_provider_spec
+        provider = self.ai_provider_var.get()
+        spec = get_provider_spec(provider)
+        if not spec:
+            return
+        mode = self.api_mode_var.get()
+
+        # ---- Save current values ----
+        # Official mode: save to per-provider slot. Third-party: global, no need to save on provider switch.
+        old_provider = getattr(self, "_last_provider", None)
+        if old_provider and mode != "third_party":
+            self.api_keys[old_provider] = self.api_key_var.get()
+        self._last_provider = provider
+
+        # ---- Update model dropdown ----
+        if mode == "third_party":
+            # Third-party: use Claude Code compat model keys, free-form
+            tp_models = self._get_tp_model_list()
+            current_model = self.ai_model_var.get()
+            if current_model and current_model not in tp_models:
+                tp_models = tp_models + [current_model]
+            self.model_combo.config(values=tp_models, state="normal")
+        elif provider == "custom":
+            models = spec["models"] or [""]
+            current_model = self.ai_model_var.get()
+            if current_model:
+                models = [current_model] if current_model not in models else models
+            self.model_combo.config(values=models, state="normal")
+            if not current_model:
+                self.ai_model_var.set(spec["default_model"])
+        else:
+            models = spec["models"] or [""]
+            self.model_combo.config(values=models, state="readonly")
+            if self.ai_model_var.get() not in models:
+                self.ai_model_var.set(spec["default_model"])
+
+        # ---- Load provider-specific values ----
+        if mode == "third_party":
+            # Third-party auth/URL are global — don't change on provider switch
+            # Only update label to reflect new provider
+            self._ai_key_label_text.set(self._make_key_label(provider))
+            # Keep endpoint row visible
+            if not self.custom_endpoint_row.winfo_ismapped():
+                self.custom_endpoint_row.pack(fill=tk.X, pady=(0, 8), before=self.model_combo.master)
+        else:
+            self.api_key_var.set(self.api_keys.get(provider, ""))
+            self.custom_endpoint_var.set(self.saved_custom_endpoint if provider == "custom" else "")
+            if provider != "custom":
+                self.ai_model_var.set(spec["default_model"] if self.ai_model_var.get() not in models else self.ai_model_var.get())
+            # Update labels
+            self._ai_key_label_text.set(self._make_key_label(provider))
+            self._endpoint_label_widget.config(text=self._make_endpoint_label())
+
+            # Show/hide endpoint row for official mode
+            if provider == "custom":
+                if not self.custom_endpoint_row.winfo_ismapped():
+                    self.custom_endpoint_row.pack(fill=tk.X, pady=(0, 8), before=self.model_combo.master)
+            else:
+                self.custom_endpoint_row.pack_forget()
+
+        if hasattr(self, "powered_by_label") and self.powered_by_label is not None:
+            try:
+                self.powered_by_label.config(text=self.t("powered_by", provider=spec["label"]))
+            except tk.TclError:
+                pass  # widget destroyed by rebuild_ui
+
+        # Sync Report-page model combo if it exists
+        if hasattr(self, "report_model_combo") and self.report_model_combo is not None:
+            try:
+                if mode == "third_party":
+                    rpt_models = self._get_tp_model_list()
+                else:
+                    rpt_models = spec["models"] or [""]
+                self.report_model_combo.config(values=rpt_models)
+            except tk.TclError:
+                pass
+
+        self.save_ui_preferences()
+
+    def _build_ai_summarizer(self):
+        from src.ai_summarizer import AISummarizer
+        provider = self.ai_provider_var.get()
+        api_key = self._get_effective_api_key()
+        custom_endpoint = self._get_effective_endpoint()
+        return AISummarizer(api_key=api_key, provider=provider,
+                            custom_endpoint=custom_endpoint)
+
+    def _get_effective_api_key(self):
+        """Return the usable API key for the current provider + mode.
+
+        Checks official keys, third-party / Claude-style tokens, and
+        os.environ — matching the layering logic of cli.py.
+        Returns empty string if nothing is configured.
+        """
+        provider = self.ai_provider_var.get()
+
+        # CLI args equivalent (none in GUI)
+        cli_key = ""
+
+        # os.environ
+        env_key = os.environ.get(f"{provider.upper()}_API_KEY", "")
+
+        # Third-party tokens (from .env or .claude/settings.json)
+        tp_token = self.tp_auth_token
+
+        # Saved canonical keys from .env
+        saved = self.api_keys.get(provider, "")
+
+        # Return first non-empty in priority order
+        return cli_key or env_key or tp_token or saved
+
+    def _get_effective_endpoint(self):
+        """Return the usable endpoint for the current provider + mode."""
+        provider = self.ai_provider_var.get()
+        if self.api_mode_var.get() == "third_party":
+            return self.tp_base_url or self.custom_endpoint_var.get()
+        if provider == "custom":
+            return self.custom_endpoint_var.get()
+        return ""
+
+    def _has_any_ai_key(self):
+        """Check whether ANY AI key is configured (official or third-party).
+
+        Used to decide whether to auto-enable the AI summary checkbox
+        and to warn before generating a report with no key.
+        """
+        # Third-party token
+        if self.tp_auth_token:
+            return True
+        # os.environ key for current provider
+        provider = self.ai_provider_var.get()
+        if os.environ.get(f"{provider.upper()}_API_KEY", ""):
+            return True
+        # .env canonical keys (any provider)
+        if any(v for v in self.api_keys.values() if v):
+            return True
+        return False
 
     def on_key_issue_highlight_toggle(self):
         self.save_ui_preferences()
@@ -1524,8 +2202,8 @@ class JiraReportApp:
         self.processing_status.config(text=status_text)
         self.processing_detail.config(text="")
         self.progress_var.set(0)
-        self.processing_frame.pack(fill=tk.X, pady=(8, 0))
-        self.progress_bar.pack(fill=tk.X, pady=(0, 8))
+        self.processing_frame.pack(fill=tk.X, pady=(8, 0), before=self._report_canvas)
+        self.progress_bar.pack(fill=tk.X, pady=(0, 8), before=self._report_canvas)
         self.sidebar_progress = 0
         self._update_sidebar_progress(0)
         self._spin_step()
@@ -1613,8 +2291,21 @@ class JiraReportApp:
         if save_dir and not os.path.exists(save_dir):
             os.makedirs(save_dir)
 
-        self.column_order_var.set(self._normalize_column_order(self.column_order_var.get()))
+        # Validate AI key before proceeding — must happen before save_ui_preferences
+        # so we don't persist a bad state if the user cancels.
+        if self.use_ai_summary_var.get() and not self._get_effective_api_key():
+            self.use_ai_summary_var.set(False)
+            self.ai_config_outer.pack_forget()
+            messagebox.showwarning(
+                self.t("ai_key_missing_title"),
+                self.t("ai_key_missing_message"),
+            )
+            self._show_page("settings")
+            return
+
         self.save_ui_preferences()
+
+        self.column_order_var.set(self._normalize_column_order(self.column_order_var.get()))
 
         self.cancel_event.clear()
         self.generation_running = True
@@ -2278,103 +2969,14 @@ class JiraReportApp:
         return compute_blocked_marker(status, comments, end_date)
 
     def summarize_progress_with_ai(self, issue_key, summary, comments, model, status="", end_date=None):
-        """Use DeepSeek AI to summarize issue progress from comments"""
+        """Use AI (provider-aware) to summarize issue progress from comments"""
         self.check_cancelled()
         blocked_marker = compute_blocked_marker(status, comments, end_date)
         if blocked_marker:
             return blocked_marker
 
-        api_key = self.saved_deepseek_api_key.strip()
-        if not api_key:
-            return "[AI总结] 未配置API Key"
-
-        if not comments:
-            return "[AI总结] 无评论"
-
-        # Use improved formatting method
-        comments_text = self._format_comments_for_ai(comments, max_chars=900)
-
-        has_in_period = any(c.get('in_period', True) for c in comments)
-        period_hint = (
-            "[本期]=本报告周期内评论，[背景]=周期前背景。优先基于[本期]总结，无[本期]时用[背景]。"
-            if any(not c.get('in_period', True) for c in comments) else ""
-        )
-
-        prompt = (
-            f"Issue: {summary}\n"
-            f"{'标注说明: ' + period_hint if period_hint else ''}\n\n"
-            f"{comments_text}\n\n"
-            f"用1~3句话总结技术进展，优先级：验证/恢复/关闭结果 > 当前用户或我方提供的方案/文件/补丁 > 分析结论 > 待确认。"
-            f"必须写成“动作+结果/状态”，不要输出裸路径、文件名、NV/CFUN关键词或日志名。"
-            f"若客户回复验证可以/恢复正常，要明确写验证通过/问题关闭；若无实质进展才回复【仍在排查中】。"
-        ).strip()
-
-        try:
-            headers = {
-                "Authorization": f"Bearer {api_key}",
-                "Content-Type": "application/json"
-            }
-            payload = {
-                "model": model,
-                "messages": [
-                    {"role": "user", "content": prompt}
-                ],
-                "max_tokens": 500,
-                "temperature": 0.3
-            }
-            response = requests.post(
-                "https://api.deepseek.com/chat/completions",
-                headers=headers,
-                json=payload,
-                timeout=60
-            )
-            self.check_cancelled()
-
-            # Try to parse JSON first
-            try:
-                result = response.json()
-            except ValueError:
-                # Response is not JSON, check status
-                if response.status_code == 200:
-                    # Empty or malformed response
-                    return self._fallback_summary(comments, "API返回格式错误")
-                return self._fallback_summary(comments, f"API返回非JSON: HTTP {response.status_code}")
-
-            # Check for API-level errors in response
-            if "error" in result:
-                return self._fallback_summary(comments, "API返回错误")
-
-            if response.status_code == 200:
-                choices = result.get("choices")
-                if not choices:
-                    return self._fallback_summary(comments, "API返回空")
-
-                message = choices[0].get("message", {})
-                summary_text = message.get("content", "").strip()
-
-                if summary_text:
-                    return self._sanitize_ai_summary(summary_text, comments)
-                else:
-                    return self._fallback_summary(comments)
-            elif response.status_code == 401:
-                return "[AI总结] DeepSeek API Key无效"
-            elif response.status_code == 429:
-                return self._fallback_summary(comments, "API请求超过限额")
-            elif response.status_code == 400:
-                return self._fallback_summary(comments, "请求参数错误")
-            else:
-                return self._fallback_summary(comments, f"API错误: HTTP {response.status_code}")
-
-        except requests.exceptions.Timeout:
-            return self._fallback_summary(comments)
-        except requests.exceptions.ConnectionError:
-            return self._fallback_summary(comments)
-        except OperationCancelled:
-            raise
-        except Exception:
-            return self._fallback_summary(comments)
-
-        return self._fallback_summary(comments)
+        summarizer = self._build_ai_summarizer()
+        return summarizer.summarize(issue_key, summary, comments, model=model)
 
     def _fallback_summary(self, comments, reason=""):
         """Deterministic fallback summary that prefers solution + verification/resolution."""
@@ -2443,134 +3045,22 @@ class JiraReportApp:
         ai_candidates = []
         for item in issues_data:
             marker = self._blocked_status_marker(
-                item.get('status', ''),
-                item.get('comments', []),
+                item.get("status", ""),
+                item.get("comments", []),
                 end_date,
             )
             if marker:
-                blocked_results[item['issue_key']] = marker
+                blocked_results[item["issue_key"]] = marker
             else:
                 ai_candidates.append(item)
 
         if not ai_candidates:
             return blocked_results
 
-        api_key = self.saved_deepseek_api_key.strip()
-        if not api_key:
-            return {**blocked_results, **{item['issue_key']: "未配置API Key" for item in ai_candidates}}
-
-        # Filter items with comments
-        items_with_comments = [item for item in ai_candidates if item['comments']]
-        if not items_with_comments:
-            return {**blocked_results, **{item['issue_key']: "无评论" for item in ai_candidates}}
-
-        def batch_fallback():
-            return {
-                **blocked_results,
-                **{
-                    item['issue_key']: self._fallback_summary(item['comments']) if item['comments'] else "无评论"
-                    for item in ai_candidates
-                },
-            }
-
-        # Build combined prompt
-        combined_text = []
-        has_context_tags = False
-        for item in items_with_comments:
-            comments_text = self._format_comments_for_ai(item['comments'], max_chars=600)
-            title_line = f"【{item['summary']}】" if item.get('summary') else ""
-            combined_text.append(f"## {item['issue_key']} {title_line}\n{comments_text}")
-            if any(not c.get('in_period', True) for c in item['comments']):
-                has_context_tags = True
-
-        period_note = "[本期]=报告周期内, [背景]=周期前背景。优先基于[本期]总结。\n" if has_context_tags else ""
-        issues_block = "\n\n".join(combined_text)
-
-        # Load skill for prompt template
-        skill_content = self._load_skill("batch_ai_summary_skill")
-        if skill_content:
-            prompt = f"{period_note}{skill_content}\n\n{issues_block}"
-        else:
-            prompt = (
-                f"{period_note}"
-                f"总结以下每个Jira issue技术进展，每项1~2句话。优先级：验证/恢复/关闭结果 > 当前用户或我方方案/文件/补丁 > 分析结论 > 待确认。\n"
-                f"必须写成动作+结果/状态，不要输出裸路径、文件名、NV/CFUN关键词或日志名。\n"
-                f"格式：issue_key: 总结内容（无实质进展才写：issue_key: 仍在排查中）\n\n"
-                f"{issues_block}"
-            )
-
-        try:
-            headers = {
-                "Authorization": f"Bearer {api_key}",
-                "Content-Type": "application/json"
-            }
-            payload = {
-                "model": model,
-                "messages": [
-                    {"role": "user", "content": prompt}
-                ],
-                "max_tokens": 2000,
-                "temperature": 0.3
-            }
-            response = requests.post(
-                "https://api.deepseek.com/chat/completions",
-                headers=headers,
-                json=payload,
-                timeout=180
-            )
-            self.check_cancelled()
-
-            try:
-                result = response.json()
-            except ValueError:
-                return batch_fallback()
-
-            if "error" in result:
-                return batch_fallback()
-
-            if response.status_code == 200:
-                choices = result.get("choices", [])
-                if choices:
-                    content = choices[0].get("message", {}).get("content", "").strip()
-                    return {**blocked_results, **self._parse_batch_results(content, items_with_comments)}
-
-        except OperationCancelled:
-            raise
-        except Exception:
-            return batch_fallback()
-
-        return batch_fallback()
-
-    def _parse_batch_results(self, content, items):
-        """Parse batch AI response into individual summaries"""
-        results = {}
-        lines = content.split('\n')
-
-        for line in lines:
-            line = line.strip()
-            if not line:
-                continue
-            line = re.sub(r'^[-*•\d.\s]+', '', line).strip()
-            # Match "issue_key: summary" format, accepting full-width colon and markdown noise
-            match = re.match(r'([A-Z]+-\d+)\s*[:：]\s*(.+)$', line)
-            if match:
-                key = match.group(1).strip()
-                summary = match.group(2).strip()
-                item = next((item for item in items if item['issue_key'] == key), None)
-                results[key] = self._sanitize_ai_summary(summary, item['comments']) if item else summary
-
-        # Check if we got any valid results
-        for item in items:
-            key = item['issue_key']
-            if key not in results:
-                # Fallback to latest comment
-                comments = item['comments']
-                if comments:
-                    results[key] = self._fallback_summary(comments)
-                else:
-                    results[key] = "无评论"
-
-        return results
+        # Delegate to AISummarizer
+        summarizer = self._build_ai_summarizer()
+        ai_results = summarizer.batch_summarize(ai_candidates, model=model)
+        return {**blocked_results, **ai_results}
 
     def create_excel(self, issues, filepath, statuses, start_date, end_date):
         self.check_cancelled()

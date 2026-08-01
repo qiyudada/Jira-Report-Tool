@@ -1,18 +1,24 @@
 """
-AI Summarizer - DeepSeek AI integration for issue summarization
+AI Summarizer - Multi-provider AI integration for issue summarization
 """
-import requests
 import re
+from src.ai_providers import call_ai, get_label
 
 
 class AISummarizer:
-    def __init__(self, api_key: str = None):
-        self.api_key = api_key or ""
+    def __init__(self, api_key: str = "", provider: str = "deepseek", custom_endpoint: str = ""):
+        self.api_key = api_key
+        self.provider = provider
+        self.custom_endpoint = custom_endpoint
+
+    @property
+    def _provider_label(self):
+        return get_label(self.provider)
 
     def summarize(self, issue_key: str, summary: str, comments: list, model: str = "deepseek-chat") -> str:
-        """Use DeepSeek AI to summarize issue progress from comments"""
+        """Use AI to summarize issue progress from comments"""
         if not self.api_key:
-            return "[AI总结] 未配置API Key"
+            return f"[AI总结] 未配置API Key"
 
         if not comments:
             return "[AI总结] 无评论"
@@ -34,61 +40,31 @@ class AISummarizer:
             f"若客户回复验证可以/恢复正常，要明确写验证通过/问题关闭；若无实质进展才回复【仍在排查中】。"
         ).strip()
 
-        try:
-            headers = {
-                "Authorization": f"Bearer {self.api_key}",
-                "Content-Type": "application/json"
-            }
-            payload = {
-                "model": model,
-                "messages": [
-                    {"role": "user", "content": prompt}
-                ],
-                "max_tokens": 500,
-                "temperature": 0.3
-            }
-            response = requests.post(
-                "https://api.deepseek.com/chat/completions",
-                headers=headers,
-                json=payload,
-                timeout=60
-            )
+        result = call_ai(
+            provider_id=self.provider,
+            api_key=self.api_key,
+            model=model,
+            prompt=prompt,
+            max_tokens=500,
+            timeout=60,
+            custom_endpoint=self.custom_endpoint,
+        )
 
-            try:
-                result = response.json()
-            except ValueError:
-                return self._fallback_summary(comments, "API返回格式错误")
-
-            if "error" in result:
-                return self._fallback_summary(comments, "API返回错误")
-
-            if response.status_code == 200:
-                choices = result.get("choices")
-                if not choices:
-                    return self._fallback_summary(comments, "API返回空")
-
-                message = choices[0].get("message", {})
-                summary_text = message.get("content", "").strip()
-
-                if summary_text:
-                    return self._sanitize_ai_summary(summary_text, comments)
-                else:
-                    return self._fallback_summary(comments)
-            elif response.status_code == 401:
-                return "[AI总结] DeepSeek API Key无效"
-            elif response.status_code == 429:
-                return self._fallback_summary(comments, "API请求超过限额")
-            elif response.status_code == 400:
-                return self._fallback_summary(comments, "请求参数错误")
+        if result["ok"]:
+            return self._sanitize_ai_summary(result["content"], comments)
+        else:
+            error = result.get("error", "")
+            status = result.get("status_code", 0)
+            endpoint = result.get("endpoint", "")
+            if status == 401:
+                target = f"\n→ {endpoint}" if endpoint else ""
+                return f"[AI总结] {self._provider_label} API Key 无效{target}"
+            elif status == 429:
+                return self._fallback_summary(comments, "API 请求超过限额")
+            elif error:
+                return self._fallback_summary(comments, error)
             else:
-                return self._fallback_summary(comments, f"API错误: HTTP {response.status_code}")
-
-        except requests.exceptions.Timeout:
-            return self._fallback_summary(comments)
-        except requests.exceptions.ConnectionError:
-            return self._fallback_summary(comments)
-        except Exception:
-            return self._fallback_summary(comments)
+                return self._fallback_summary(comments)
 
     def batch_summarize(self, items: list, model: str = "deepseek-chat") -> dict:
         """Batch summarize multiple issues with a single API call
@@ -130,42 +106,18 @@ class AISummarizer:
             f"{issues_block}"
         )
 
-        try:
-            headers = {
-                "Authorization": f"Bearer {self.api_key}",
-                "Content-Type": "application/json"
-            }
-            payload = {
-                "model": model,
-                "messages": [
-                    {"role": "user", "content": prompt}
-                ],
-                "max_tokens": 2000,
-                "temperature": 0.3
-            }
-            response = requests.post(
-                "https://api.deepseek.com/chat/completions",
-                headers=headers,
-                json=payload,
-                timeout=180
-            )
+        result = call_ai(
+            provider_id=self.provider,
+            api_key=self.api_key,
+            model=model,
+            prompt=prompt,
+            max_tokens=2000,
+            timeout=180,
+            custom_endpoint=self.custom_endpoint,
+        )
 
-            try:
-                result = response.json()
-            except ValueError:
-                return batch_fallback()
-
-            if "error" in result:
-                return batch_fallback()
-
-            if response.status_code == 200:
-                choices = result.get("choices", [])
-                if choices:
-                    content = choices[0].get("message", {}).get("content", "").strip()
-                    return self._parse_batch_results(content, items_with_comments)
-
-        except Exception:
-            return batch_fallback()
+        if result["ok"]:
+            return self._parse_batch_results(result["content"], items_with_comments)
 
         return batch_fallback()
 

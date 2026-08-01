@@ -120,46 +120,66 @@ pyinstaller --onefile --windowed jira_report_generator.py
 
 The executable will be generated in the `dist/` folder.
 
-## Configuration (`.jira_config`)
+## Configuration (`.env`)
 
-The desktop app stores settings in `.jira_config` (JSON):
+All settings are stored in a `.env` file at the project root. Copy `.env.example` to `.env` and fill in your credentials:
 
-```json
-{
-  "username": "your.name@example.com",
-  "password": "your_jira_password",
-  "last_save_dir": "C:/Users/YourName/Downloads",
-  "deepseek_api_key": "sk-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
-  "ai_model": "deepseek-chat"
-}
+```env
+# Jira credentials
+JIRA_USERNAME=your-email@example.com
+JIRA_PASSWORD=your-password
+
+# AI provider: deepseek | openai | anthropic | custom
+AI_PROVIDER=deepseek
+
+# Per-provider API keys (fill in the ones you need)
+DEEPSEEK_API_KEY=sk-your-deepseek-key
+OPENAI_API_KEY=sk-your-openai-key
+ANTHROPIC_API_KEY=sk-ant-your-anthropic-key
+CUSTOM_API_KEY=
+
+# Settings
+AI_MODEL=deepseek-chat
+CUSTOM_ENDPOINT=
+COLUMN_ORDER=1,2,3,4,5,6,7
+KEY_ISSUE_HIGHLIGHT=true
+COMMENT_TIMESTAMP_PREFIX=false
+THEME=Geek
+LANGUAGE=zh
+LAST_SAVE_DIR=~/Downloads
 ```
 
 | Field | Description |
-|-------|-------------|
-| `username` | Jira login email |
-| `password` | Jira login password |
-| `last_save_dir` | Default directory for saving the Excel report |
-| `deepseek_api_key` | DeepSeek API Key for AI summary feature |
-| `ai_model` | DeepSeek model to use |
+|---|---|
+| `JIRA_USERNAME` | Jira login email |
+| `JIRA_PASSWORD` | Jira login password |
+| `AI_PROVIDER` | AI provider: `deepseek`, `openai`, `anthropic`, or `custom` |
+| `DEEPSEEK_API_KEY` | DeepSeek API key |
+| `OPENAI_API_KEY` | OpenAI API key |
+| `ANTHROPIC_API_KEY` | Anthropic (Claude) API key |
+| `CUSTOM_API_KEY` | Custom OpenAI-compatible provider API key |
+| `AI_MODEL` | Model name (auto-populated when provider is selected) |
+| `CUSTOM_ENDPOINT` | Endpoint URL for custom provider |
+| `LAST_SAVE_DIR` | Default directory for saving reports |
 
 ## AI Summary (Optional)
 
-The app supports AI-powered comment summarization via the [DeepSeek API](https://platform.deepseek.com/).
+Supports **DeepSeek**, **OpenAI**, **Anthropic (Claude)**, and **custom OpenAI-compatible** providers.
 
 **Setup:**
+1. Get an API key from your chosen provider
+2. Set it in `.env` under the matching key (e.g. `OPENAI_API_KEY=sk-...`)
+3. Or set the environment variable (e.g. `export OPENAI_API_KEY=your_key`)
+4. Or use `--ai-key` + `--ai-provider` flags in CLI
 
-1. Register at [platform.deepseek.com](https://platform.deepseek.com/) and create an API Key.
-2. Set via environment variable: `export DEEPSEEK_API_KEY=your_key`
-3. Or use `--ai-key` flag in CLI
+**Provider model lists:**
 
-**Supported models:**
-
-| Model | Description |
-|-------|-------------|
-| `deepseek-chat` | General-purpose chat model (default, recommended) |
-| `deepseek-coder` | Optimized for code-related content |
-| `deepseek-v4-flash` | Faster, lower-cost variant |
-| `deepseek-v4-pro` | Higher capability, higher cost |
+| Provider | Models |
+|---|---|
+| DeepSeek | deepseek-chat, deepseek-coder, deepseek-v4-flash, deepseek-v4-pro |
+| OpenAI | gpt-4o, gpt-4o-mini, gpt-4-turbo, gpt-3.5-turbo, o1, o1-mini, o3-mini |
+| Anthropic | claude-sonnet-4-6, claude-opus-4-6, claude-haiku-4-5 |
+| Custom | User-defined model name |
 
 ## Report Output
 

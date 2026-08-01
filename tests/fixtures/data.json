@@ -1,0 +1,53 @@
+{
+  "metadata": {
+    "start_date": "2026-05-01",
+    "end_date": "2026-05-31",
+    "generated_at": "2026-06-08T10:00:00",
+    "status_filter": "ALL",
+    "column_order": "1,2,3,4,5,6,7",
+    "key_issue_highlight": true,
+    "header_align": "left",
+    "cell_align": "center",
+    "jira_base_url": "https://ticket.quectel.com"
+  },
+  "issues": [
+    {
+      "key": "FAE-100",
+      "summary": "get_addrinfo对应API接口没有gateway",
+      "status": "WAIT OFFICIAL RELEASE",
+      "customer_name": "佰才邦",
+      "model_name": "RG220UAB",
+      "key_issue": "否",
+      "highlight_key_issue": false,
+      "comments": [
+        {
+          "author": "lisi",
+          "date": "2026-05-15",
+          "body": "新版本已编译完成，等待SPM同步",
+          "in_period": true,
+          "author_role": "我方"
+        }
+      ],
+      "prefilled_summary": "[问题已解决，等待SPM同步版本] <2026-05-15>"
+    },
+    {
+      "key": "FAE-200",
+      "summary": "蓝牙连接偶发断开",
+      "status": "WORKING",
+      "customer_name": "客户A",
+      "model_name": "EG912U",
+      "key_issue": "是",
+      "highlight_key_issue": true,
+      "comments": [
+        {
+          "author": "me",
+          "date": "2026-05-20",
+          "body": "修改了蓝牙重连参数，提供补丁让客户验证",
+          "in_period": true,
+          "author_role": "当前用户"
+        }
+      ],
+      "prefilled_summary": ""
+    }
+  ]
+}

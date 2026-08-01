@@ -4,12 +4,12 @@ Jira Report CLI - Command-line interface for Jira Report Tool
 Can be used directly or called by Claude Code via skill.
 
 Subcommands:
-  run      End-to-end fetch + filter + AI (DeepSeek) + Excel (default; legacy).
+  run      End-to-end fetch + filter + AI + Excel (default; legacy).
   prepare  Fetch + filter + collect comments, write data.json (no AI).
   export   Read data.json + summaries.json, write Excel (no AI).
 
 When invoked as a Claude Code skill, agents should use `prepare` and `export`
-so the agent itself does the AI summary, with no DeepSeek API call.
+so the agent itself does the AI summary, with no API call.
 """
 import argparse
 import sys
@@ -21,10 +21,14 @@ import json
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from src import JiraClient, ReportGenerator, Config
+from src.ai_providers import get_models, get_default_model, get_label, provider_env_var
+from src.env_config import load_env, load_claude_settings, normalize_claude_env_keys
 
 
 VALID_STATUSES = ["ALL", "WAIT FAE INFO", "WORKED AROUND", "WORKING",
                   "CLOSED", "RESOLVED", "WAIT 3RD PARTY"]
+
+VALID_PROVIDERS = ["deepseek", "openai", "anthropic", "custom"]
 
 
 def _add_format_flags(parser):
@@ -55,12 +59,93 @@ def _parse_dates(start_str, end_str):
 
 
 def _build_config_from_args(args):
+    """Layer config sources: CLI args > os.environ > .claude/settings.json > .env > defaults"""
+    project_dir = os.path.dirname(os.path.abspath(__file__))
+
+    # --- Layer 4: .env file (lowest file-based priority) ---
+    dotenv_path = os.path.join(project_dir, ".env")
+    dotenv = load_env(dotenv_path) if os.path.exists(dotenv_path) else {}
+    # Apply Claude-style key mappings so .env can use ANTHROPIC_AUTH_TOKEN,
+    # ANTHROPIC_BASE_URL, ANTHROPIC_MODEL etc. like .claude/settings.json
+    dotenv_claude = normalize_claude_env_keys(dotenv)
+    # Merge Claude-mapped values under existing canonical keys (dotenv wins)
+    dotenv = {**dotenv_claude, **dotenv}
+
+    # --- Layer 3: .claude/settings.json env block ---
+    claude_env = load_claude_settings(project_dir)
+    # Map Claude conventions: ANTHROPIC_AUTH_TOKEN -> ANTHROPIC_API_KEY, etc.
+    claude_keys = {
+        "deepseek": claude_env.get("DEEPSEEK_API_KEY", "") or claude_env.get("DEEPSEEK_AUTH_TOKEN", ""),
+        "openai": claude_env.get("OPENAI_API_KEY", ""),
+        "anthropic": claude_env.get("ANTHROPIC_API_KEY", "") or claude_env.get("ANTHROPIC_AUTH_TOKEN", ""),
+        "custom": claude_env.get("CUSTOM_API_KEY", ""),
+    }
+    claude_provider = claude_env.get("AI_PROVIDER", "")
+    claude_model = claude_env.get("AI_MODEL", "")
+    claude_custom_endpoint = claude_env.get("ANTHROPIC_BASE_URL", "") or claude_env.get("OPENAI_BASE_URL", "")
+
+    # --- Resolve provider ---
+    provider = (getattr(args, 'ai_provider', None)
+                or os.getenv("AI_PROVIDER", "")
+                or claude_provider
+                or dotenv.get("AI_PROVIDER")
+                or "deepseek")
+
+    # --- Resolve API keys (per-source merging) ---
+    api_keys = {
+        "deepseek": "",
+        "openai": "",
+        "anthropic": "",
+        "custom": "",
+    }
+    # .env layer
+    for p in api_keys:
+        api_keys[p] = dotenv.get(f"{p.upper()}_API_KEY", "")
+    # .claude/settings.json layer (overwrites .env)
+    for p in api_keys:
+        if claude_keys.get(p):
+            api_keys[p] = claude_keys[p]
+    # os.environ layer (overwrites .claude — Claude Code injects these at runtime)
+    for p in api_keys:
+        env_val = os.getenv(f"{p.upper()}_API_KEY", "")
+        if env_val:
+            api_keys[p] = env_val
+    # Legacy DEEPSEEK_API_KEY env var fallback for deepseek
+    if not api_keys.get("deepseek"):
+        legacy = os.getenv("DEEPSEEK_API_KEY", "")
+        if legacy:
+            api_keys["deepseek"] = legacy
+    # --ai-key flag (highest)
+    ai_key = getattr(args, 'ai_key', None) or ""
+    if ai_key:
+        api_keys[provider] = ai_key
+
+    # --- Resolve model ---
+    ai_model = (getattr(args, 'ai_model', None)
+                or os.getenv("AI_MODEL", "")
+                or claude_model
+                or dotenv.get("AI_MODEL")
+                or get_default_model(provider))
+
+    # --- Resolve custom endpoint ---
+    custom_endpoint = (getattr(args, 'custom_endpoint', '')
+                       or os.getenv("CUSTOM_ENDPOINT", "")
+                       or claude_custom_endpoint
+                       or dotenv.get("CUSTOM_ENDPOINT", ""))
+
+    # --- Resolve column order ---
+    column_order = (getattr(args, 'columns', None)
+                    or dotenv.get("COLUMN_ORDER")
+                    or "1,2,3,4,5,6,7")
+
     return Config(
         username=args.username,
         password=args.password,
-        deepseek_api_key=getattr(args, 'ai_key', None) or os.getenv("DEEPSEEK_API_KEY", ""),
-        ai_model=getattr(args, 'ai_model', "deepseek-chat"),
-        column_order=Config.normalize_column_order(args.columns),
+        ai_model=ai_model,
+        ai_provider=provider,
+        api_keys=api_keys,
+        custom_endpoint=custom_endpoint,
+        column_order=Config.normalize_column_order(column_order),
         key_issue_highlight=not args.no_key_highlight,
         comment_timestamp_prefix=getattr(args, 'timestamp_prefix', False),
         header_align=args.header_align,
@@ -79,7 +164,7 @@ def _login_client(args):
 
 
 def cmd_run(args):
-    """End-to-end one-shot: fetch + filter + (optional DeepSeek AI) + Excel.
+    """End-to-end one-shot: fetch + filter + (optional AI) + Excel.
     This is the legacy entry point. For the skill/agent flow, use prepare/export."""
     start_date, end_date = _parse_dates(args.start, args.end)
 
@@ -90,8 +175,18 @@ def cmd_run(args):
     if output_dir and not os.path.exists(output_dir):
         os.makedirs(output_dir)
 
-    api_key = args.ai_key or os.getenv("DEEPSEEK_API_KEY", "")
     config = _build_config_from_args(args)
+    provider = config.ai_provider
+    model = config.ai_model
+    api_key = config.api_keys.get(provider, "")
+
+    # Validate model for non-custom providers
+    if provider != "custom":
+        valid_models = get_models(provider)
+        if valid_models and model not in valid_models:
+            print(f"Error: model '{model}' not valid for provider '{provider}'. "
+                  f"Valid models: {', '.join(valid_models)}", file=sys.stderr)
+            sys.exit(1)
 
     client = _login_client(args)
 
@@ -100,11 +195,15 @@ def cmd_run(args):
     fetch_comment = bool(getattr(args, 'fetch_comment', False))
     if args.ai and api_key:
         from src import AISummarizer
-        print(f"AI summarization enabled (model: {args.ai_model})")
-        ai_summarizer = AISummarizer(api_key)
+        provider_label = get_label(provider)
+        print(f"AI summarization enabled (provider: {provider_label}, model: {model})")
+        ai_summarizer = AISummarizer(api_key=api_key, provider=provider,
+                                      custom_endpoint=config.custom_endpoint)
         use_ai = True
     elif args.ai and not api_key:
-        print("Warning: --ai specified but DEEPSEEK_API_KEY not set. AI summarization disabled.",
+        env_var = provider_env_var(provider)
+        print(f"Warning: --ai specified but no API key found for provider '{provider}'. "
+              f"Set --ai-key or {env_var} env var. AI summarization disabled.",
               file=sys.stderr)
 
     print(f"Generating report for {start_date} to {end_date}...")
@@ -159,7 +258,7 @@ def cmd_prepare(args):
         with open(output_path, "w", encoding="utf-8") as f:
             json.dump(data, f, ensure_ascii=False, indent=2)
         prefilled = sum(1 for i in data["issues"] if i.get("prefilled_summary"))
-        print(f"Data written: {len(data['issues'])} issues ({prefilled} prefilled as blocked) → {output_path}")
+        print(f"Data written: {len(data['issues'])} issues ({prefilled} prefilled as blocked) -> {output_path}")
     except Exception as e:
         print(f"Error preparing data: {e}", file=sys.stderr)
         sys.exit(1)
@@ -198,12 +297,9 @@ def cmd_export(args):
               file=sys.stderr)
         sys.exit(1)
 
-    # Export doesn't need a real Jira login; supply a dummy Config.
-    # The actual formatting fields come from data["metadata"].
     config = Config(
         username="",
         password="",
-        deepseek_api_key="",
         ai_model="deepseek-chat",
         column_order=Config.normalize_column_order(args.columns),
         key_issue_highlight=not args.no_key_highlight,
@@ -211,15 +307,12 @@ def cmd_export(args):
         header_align=args.header_align,
         cell_align=args.cell_align,
     )
-    # We don't need a real JiraClient for export, but ReportGenerator requires one.
-    # Pass None and override the methods that touch it... actually simpler:
-    # construct a stub client whose methods that aren't called during export are unused.
     client = _StubJiraClient()
 
     generator = ReportGenerator(client, config)
     try:
         count = generator.export_from_data(data, summaries, output_path)
-        print(f"Report exported: {count} issues → {output_path}")
+        print(f"Report exported: {count} issues -> {output_path}")
         print(f"File: {os.path.abspath(output_path)}")
     except Exception as e:
         print(f"Error exporting report: {e}", file=sys.stderr)
@@ -282,8 +375,12 @@ Examples:
   # ... agent reads data.json, writes summaries.json ...
   python cli.py export --input data.json --summaries summaries.json -o report.xlsx
 
-  # Legacy one-shot flow (uses DeepSeek for AI):
+  # One-shot flow with DeepSeek (default provider):
   python cli.py run -u USER -p PASS --start 2026-05-01 --end 2026-05-31 -o report.xlsx --ai
+
+  # One-shot flow with OpenAI:
+  python cli.py run -u USER -p PASS --start 2026-05-01 --end 2026-05-31 -o report.xlsx --ai --ai-provider openai --ai-model gpt-4o
+
   # (also works without the 'run' subcommand for backward compat)
         """,
     )
@@ -291,17 +388,21 @@ Examples:
     subparsers.required = False
     subparsers.default = "run"
 
-    # --- run (legacy one-shot, default) ---
-    p_run = subparsers.add_parser("run", help="end-to-end with optional DeepSeek AI (default)")
+    # --- run (one-shot, default) ---
+    p_run = subparsers.add_parser("run", help="end-to-end with optional AI (default)")
     p_run.add_argument("-u", "--username", required=True)
     p_run.add_argument("-p", "--password", required=True)
     p_run.add_argument("--start", required=True)
     p_run.add_argument("--end", required=True)
     p_run.add_argument("-o", "--output", required=True)
     p_run.add_argument("--ai", action="store_true")
-    p_run.add_argument("--ai-key")
-    p_run.add_argument("--ai-model", default="deepseek-chat",
-                       choices=["deepseek-chat", "deepseek-coder", "deepseek-v4-flash", "deepseek-v4-pro"])
+    p_run.add_argument("--ai-key", help="API key for the selected provider")
+    p_run.add_argument("--ai-provider", default="deepseek", choices=VALID_PROVIDERS,
+                       help="AI provider (default: deepseek)")
+    p_run.add_argument("--custom-endpoint",
+                       help="Custom OpenAI-compatible endpoint URL (for --ai-provider=custom)")
+    p_run.add_argument("--ai-model", default=None,
+                       help="AI model name (default: provider's default model)")
     p_run.add_argument("--batch-mode", action="store_true")
     p_run.add_argument("--batch-size", type=int, default=10)
     p_run.add_argument("--fetch-comment", action="store_true")
@@ -319,7 +420,7 @@ Examples:
     _add_format_flags(p_prep)
 
     # --- export ---
-    p_exp = subparsers.add_parser("export", help="data.json + summaries.json → xlsx")
+    p_exp = subparsers.add_parser("export", help="data.json + summaries.json -> xlsx")
     p_exp.add_argument("--input", required=True, help="Path to data.json from `prepare`")
     p_exp.add_argument("--summaries", required=True,
                        help="Path to summaries.json (flat {issue_key: summary})")
