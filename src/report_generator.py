@@ -75,6 +75,12 @@ class ReportGenerator:
             f'AND assignee in (currentUser()) ORDER BY updated DESC'
         )
 
+        # New: assignee-based query — tickets assigned to current user regardless of SDE field.
+        # Post-fetch filter requires the current user to have commented in the date range.
+        jql_assignee = f'assignee in (currentUser()) AND updated >= {start_date} AND updated <= "{end_date} 23:59"'
+        if status_clause:
+            jql_assignee += f' AND {status_clause}'
+
         issues_assigned_normal = self.client.fetch_issues(jql_normal)
         issues_assigned_wait3rd = self.client.fetch_issues(jql_wait3rd)
         issues_assigned = issues_assigned_normal + issues_assigned_wait3rd
@@ -94,7 +100,18 @@ class ReportGenerator:
             if self._should_include_issue(issue, start_date, end_date)
         ]
 
-        all_issues = {issue['key']: issue for issue in issues_assigned_filtered + issues_assist_filtered + issues_st_bug_review}
+        # Fetch assignee-based issues and keep only those where user commented in range.
+        issues_assignee = self.client.fetch_issues(jql_assignee)
+        issues_assignee_filtered = [
+            issue for issue in issues_assignee
+            if self.client.user_commented_in_date_range(issue['key'], start_date, end_date)
+        ]
+
+        # Build deduplicated dict: existing queries take priority (added first),
+        # assignee-based issues fill in any remaining gaps.
+        all_issues = {issue['key']: issue for issue in (
+            issues_assigned_filtered + issues_assist_filtered + issues_st_bug_review + issues_assignee_filtered
+        )}
         issues = list(all_issues.values())
         issues.sort(key=lambda x: -self._get_created_timestamp(x))
         return issues
@@ -324,6 +341,7 @@ class ReportGenerator:
         issue_key = str(issue_key or "")
         is_st_issue = self._is_st_issue(issue_key)
         is_rd_issue = issue_key.upper().startswith("SW")
+        is_opendemand = issue_key.upper().startswith("OPENDEMAND")
 
         customer = self.client._field_to_text(fields.get("customfield_11029"))
         model = self.client._field_to_text(fields.get("customfield_12031"))
@@ -338,7 +356,11 @@ class ReportGenerator:
         platform = self.client._field_to_text(fields.get("customfield_10400")) or \
                    self.client._field_to_text(fields.get("customfield_10401"))
 
-        if is_st_issue:
+        if is_opendemand:
+            # OPENDEMAND (需求评估) tickets: use issue type as customer, model left blank.
+            customer = issue_type or customer
+            model = ""
+        elif is_st_issue:
             customer = issue_type or customer
             model = st_model or model
         elif is_rd_issue:

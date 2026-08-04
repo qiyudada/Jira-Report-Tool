@@ -820,6 +820,9 @@ class JiraReportApp:
         ST issue:
           Customer: Issue Type (issuetype.name, e.g. Normal BUG)
           Model:    customfield_11043
+        OPENDEMAND issue (需求评估):
+          Customer: Issue Type (issuetype.name, e.g. 需求评估)
+          Model:    (blank)
         R&D issue (e.g. SW-*):
           Customer: Epic Name(customfield_10102) -> Epic Link(customfield_10100)
           Model:    Platform(customfield_10400/10401)
@@ -827,6 +830,7 @@ class JiraReportApp:
         issue_key = str(issue_key or "")
         is_st_issue = self._is_st_issue(issue_key)
         is_rd_issue = issue_key.upper().startswith("SW")
+        is_opendemand = issue_key.upper().startswith("OPENDEMAND")
 
         customer = self._field_to_text(fields.get("customfield_11029"))
         model = self._field_to_text(fields.get("customfield_12031"))
@@ -840,7 +844,11 @@ class JiraReportApp:
         epic_name = self._extract_epic_display_name(fields)
         platform = self._field_to_text(fields.get("customfield_10400")) or self._field_to_text(fields.get("customfield_10401"))
 
-        if is_st_issue:
+        if is_opendemand:
+            # OPENDEMAND (需求评估) tickets: use issue type as customer, model left blank.
+            customer = issue_type or customer
+            model = ""
+        elif is_st_issue:
             customer = issue_type or customer
             model = st_model or model
         elif is_rd_issue:
@@ -2376,6 +2384,15 @@ class JiraReportApp:
             self.check_cancelled()
             self.root.after(0, lambda: self.update_processing(f"Found {len(issues_st_bug_review)} ST issues", "Matched ST BUG review criteria", 40))
 
+            # New: assignee-based query — tickets assigned to current user regardless of SDE field.
+            jql_assignee = f'assignee in (currentUser()) AND updated >= {start_date} AND updated <= "{end_date} 23:59"'
+            if status_clause:
+                jql_assignee += f' AND {status_clause}'
+            self.root.after(0, lambda: self.update_processing("Searching assignee issues...", "Searching assignee-based issues...", 42))
+            issues_assignee_raw = self.fetch_issues(jql_assignee)
+            self.check_cancelled()
+            self.root.after(0, lambda: self.update_processing(f"Found {len(issues_assignee_raw)} assignee issues", "Filtering by user comments...", 44))
+
             no_comment_required_statuses = {"WAIT 3RD PARTY", "WORKING"}
             wait_blocked_statuses = {"WAIT FAE INFO", "WORKED AROUND", "WAIT OFFICIAL RELEASE"}
             closed_statuses = {"CLOSED", "RESOLVED"}
@@ -2463,7 +2480,20 @@ class JiraReportApp:
                     self.root.after(0, lambda k=issue['key'], p=progress: self.update_processing("Filtering issues...", f"Skipping {k} - no activity", p))
             issues_assist = issues_assist_filtered
 
-            all_issues = {issue['key']: issue for issue in issues_assigned + issues_assist + issues_st_bug_review}
+            # Filter assignee-based issues: keep only those where current user commented in range.
+            self.root.after(0, lambda: self.update_processing("Filtering assignee issues...", f"Checking {len(issues_assignee_raw)} assignee issues", 46))
+            issues_assignee_filtered = []
+            assignee_total = max(len(issues_assignee_raw), 1)
+            for idx, issue in enumerate(issues_assignee_raw, 1):
+                self.check_cancelled()
+                progress = 46 + (idx / assignee_total) * 4
+                if self.user_commented_in_date_range(issue['key'], start_date, end_date):
+                    issues_assignee_filtered.append(issue)
+                else:
+                    self.root.after(0, lambda k=issue['key'], p=progress: self.update_processing("Filtering assignee issues...", f"Skipping {k} - no user comment", p))
+            self.root.after(0, lambda: self.update_processing(f"Found {len(issues_assignee_filtered)} assignee issues with comments", "Merging all issues...", 50))
+
+            all_issues = {issue['key']: issue for issue in issues_assigned + issues_assist + issues_st_bug_review + issues_assignee_filtered}
             issues = list(all_issues.values())
 
             def get_created_timestamp(issue):
