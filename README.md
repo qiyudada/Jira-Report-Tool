@@ -195,6 +195,44 @@ Generated Excel contains:
 | 是否为重点问题 | Key issue flag (A/B/C/D/E or 是/否) |
 | 进展 | Progress (AI summary or latest comment) |
 
+## Windows Scheduled Task (Weekly Automation)
+
+Use `schedule_weekly.bat` to automate weekly report generation via Windows Task Scheduler.
+
+### Script Usage
+
+```batch
+schedule_weekly.bat              Generate with AI summarization
+schedule_weekly.bat --no-ai      Generate without AI (comment-based progress)
+schedule_weekly.bat --help       Show help
+```
+
+The script automatically:
+- Reads Jira credentials and AI config from `.env`
+- Calculates the current ISO week (Monday ~ Sunday)
+- Activates the Python virtual environment (`.venv`)
+- Runs `cli.py run` and saves the report to `LAST_SAVE_DIR` (from `.env`)
+- Bridges `ANTHROPIC_AUTH_TOKEN` for third-party proxy setups when the declared provider's key slot is empty
+
+### Task Scheduler Setup
+
+1. `Win+R` → `taskschd.msc`
+2. Create Basic Task → Name: "Jira Weekly Report"
+3. Trigger: **Weekly** → Monday, 9:00 AM
+4. Action: **Start a program**
+   - **Program:** `C:\path\to\Jira-Report\schedule_weekly.bat`
+   - **Arguments:** (leave empty for AI, or `--no-ai`)
+   - **Start in:** `C:\path\to\Jira-Report`
+5. Conditions: uncheck "Start only if on AC power" (for laptops)
+
+### Prerequisites
+
+The `.venv` must already exist before the scheduled task runs:
+```batch
+python -m venv .venv
+.venv\Scripts\pip install -r requirements.txt
+```
+
 ## Quick Start (Desktop App)
 
 1. Run `python jira_report_generator.py`
