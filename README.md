@@ -25,11 +25,18 @@ After installation, Claude Code can automatically invoke this skill when you ask
 - "Create a Jira Excel report for May 2026"
 - "Generate my weekly Jira report"
 
-Claude Code will guide you through the required parameters and invoke the CLI automatically.
+The skill walks you through the required options interactively, then invokes the
+CLI automatically. It asks for: **report period**, **status filter**,
+**progress source (AI summary vs. latest-comment verbatim)**, and **output
+path**.
+
+The skill's AI summary runs on **your local Claude** (Claude Code's own
+credential), not on any key in `.env`. The `.env` API keys are only used by the
+GUI / `cli.py run --ai` path.
 
 ## CLI Usage
 
-The CLI exposes three subcommands. The `run` subcommand is the legacy one-shot
+The CLI exposes four subcommands. The `run` subcommand is the legacy one-shot
 path (still the default if no subcommand is given). The `prepare` / `derive` /
 `export` flow is the recommended path for AI agents: `derive` deterministically
 extracts progress (no LLM), and the agent only reviews/refines low-confidence
@@ -60,7 +67,7 @@ status (WAIT FAE INFO / WORKED AROUND / WAIT OFFICIAL RELEASE) with no
 in-period activity. `derive` skips those — `export` uses the prefilled text
 and ignores any agent summary for the same key.
 
-### `run` (legacy one-shot, uses DeepSeek for AI)
+### `run` (legacy one-shot, uses external LLM for AI)
 
 The same flags as before, just under an explicit `run` subcommand (which is
 the default, so old invocations still work).
@@ -87,7 +94,7 @@ DEEPSEEK_API_KEY=your_api_key python cli.py run \
 | `--cell-align` | No | center | Cell alignment |
 | `--no-key-highlight` | No | - | Disable key issue highlighting |
 
-#### `run` only (DeepSeek AI)
+#### `run` only (external LLM AI)
 | Option | Description |
 |--------|-------------|
 | `--ai` | Enable AI summarization via DeepSeek |
@@ -117,15 +124,23 @@ issues (no resolution/solution signal) that the agent should review.
 
 ## Skill Mode vs GUI Mode
 
-| | GUI (`jira_report_generator.py`) | Skill (agent + `cli.py prepare/export`) |
+| | GUI (`jira_report_generator.py`) | Skill (agent + `cli.py prepare/derive/export`) |
 |---|---|---|
-| AI summary | DeepSeek API | **Agent itself** (no external LLM) |
-| Setup | Needs `DEEPSEEK_API_KEY` | No LLM key needed |
+| AI summary | Provider API (DeepSeek/OpenAI/Anthropic/custom), key from `.env` | **Local Claude** (Claude Code credential) + `derive` code fallback |
+| Progress source | Latest comment or AI summary | AI summary or latest-comment verbatim (current user) |
+| Interaction | Tkinter window | Interactive options (`AskUserQuestion`) |
+| Setup | Needs a provider API key in `.env` | No LLM key needed |
 | Use case | Manual weekly report | Programmatic / agent workflow |
-| Multi-issue batching | `--batch-mode` | Agent batches naturally |
+| Output filename | `{user}_{start}_{end}_jira_report.xlsx` | Same as GUI (default `~/Downloads`) |
+| Speed | Fast (no LLM inference) | Slower (Claude reads `data.json`) |
 
 Both modes produce identical Excel output (columns, hyperlinks, dropdowns,
 red highlighting for key issues).
+
+> **Why the skill is slower than the GUI:** the skill adds a "Claude reads
+> `data.json` and reviews/refines summaries" step, which is the cost of using
+> local Claude for the AI summary. Jira API calls are cached per issue, and
+> `prepare` truncates/ranks comments, to keep that step as small as possible.
 
 ## Pack to EXE (Optional)
 
