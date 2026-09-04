@@ -30,21 +30,26 @@ Claude Code will guide you through the required parameters and invoke the CLI au
 ## CLI Usage
 
 The CLI exposes three subcommands. The `run` subcommand is the legacy one-shot
-path (still the default if no subcommand is given). The `prepare` / `export`
-pair is the recommended path for AI agents: the agent itself writes the AI
-summary between them, so no DeepSeek key is needed.
+path (still the default if no subcommand is given). The `prepare` / `derive` /
+`export` flow is the recommended path for AI agents: `derive` deterministically
+extracts progress (no LLM), and the agent only reviews/refines low-confidence
+issues, so no DeepSeek key is needed.
 
-### `prepare` + `export` (recommended for AI agents)
+### `prepare` + `derive` + `export` (recommended for AI agents)
 
 ```bash
 # Step 1: pull data and write data.json
 python cli.py prepare -u user@quectel.com -p password \
   --start 2026-05-01 --end 2026-05-31 -o /tmp/data.json
 
-# Step 2: agent reads /tmp/data.json, writes /tmp/summaries.json
-#   (see skills/jira_report/SKILL.md for the summary rules)
+# Step 2: deterministic progress extraction (no LLM) — writes a candidate
+#         summaries.json plus a low-confidence list on stdout
+python cli.py derive --input /tmp/data.json -o /tmp/summaries.json
 
-# Step 3: render the Excel
+# Step 3: agent reviews/refines the low-confidence entries in summaries.json
+#   (see skills/jira_report/SKILL.md for the review rules)
+
+# Step 4: render the Excel
 python cli.py export --input /tmp/data.json \
                      --summaries /tmp/summaries.json \
                      -o ~/Downloads/jira_report.xlsx
@@ -52,8 +57,8 @@ python cli.py export --input /tmp/data.json \
 
 `data.json` includes `prefilled_summary` for issues that are in a blocked
 status (WAIT FAE INFO / WORKED AROUND / WAIT OFFICIAL RELEASE) with no
-in-period activity. The agent must skip those — `export` uses the prefilled
-text and ignores any agent summary for the same key.
+in-period activity. `derive` skips those — `export` uses the prefilled text
+and ignores any agent summary for the same key.
 
 ### `run` (legacy one-shot, uses DeepSeek for AI)
 
@@ -98,6 +103,17 @@ DEEPSEEK_API_KEY=your_api_key python cli.py run \
 |--------|-------------|
 | `--input` | Path to `data.json` from `prepare` |
 | `--summaries` | Path to `summaries.json` (flat `{issue_key: summary}`) |
+
+#### `derive` only
+| Option | Description |
+|--------|-------------|
+| `--input` | Path to `data.json` from `prepare` |
+| `-o/--output` | Path for the candidate `summaries.json` |
+
+`derive` deterministically extracts a progress line for every non-prefilled
+issue (priority: verification/closure > solution/file/patch > latest comment),
+reusing the same fallback logic as the GUI. It prints a list of low-confidence
+issues (no resolution/solution signal) that the agent should review.
 
 ## Skill Mode vs GUI Mode
 

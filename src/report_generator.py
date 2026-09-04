@@ -14,6 +14,7 @@ from datetime import timedelta
 
 from .blocked import compute_blocked_marker
 from .config import Config
+from .progress_derive import limit_comments_for_context
 
 
 class ReportGenerator:
@@ -135,7 +136,12 @@ class ReportGenerator:
             )
             customer_name, model_name = self._resolve_customer_and_model(issue_key, fields)
             key_issue_value, highlight_key_issue = self._resolve_key_issue_value(issue_key, fields)
+            # Compute blocked marker against the full comment set before we
+            # truncate, so in_period detection and last-comment date stay exact.
             prefilled = compute_blocked_marker(status, comments, end_date) or ""
+            # Truncate only what goes into data.json, to keep the agent's
+            # context small. The full set is already used above for prefilled.
+            comments = limit_comments_for_context(comments)
 
             out_issues.append({
                 "key": issue_key,

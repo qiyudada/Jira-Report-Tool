@@ -17,6 +17,10 @@ class JiraClient:
         self.session = requests.Session()
         self.logged_in = False
         self.user_email = None
+        # Per-issue comment cache: the filter phase (user_commented_in_date_range)
+        # and the collect phase (_get_all_comments_in_range) both need the same
+        # issue comments; cache them so we hit Jira once per issue, not twice.
+        self._comments_cache = {}
 
     def login(self):
         """Try API login, fall back to cookie login"""
@@ -135,7 +139,14 @@ class JiraClient:
         return all_issues
 
     def get_comments(self, issue_key: str):
-        """Get all comments for an issue"""
+        """Get all comments for an issue (cached per issue).
+
+        Failures are not cached, so a transient error still retries on the next
+        call instead of being pinned to an empty list.
+        """
+        if issue_key in self._comments_cache:
+            return self._comments_cache[issue_key]
+
         try:
             url = f"{self.base_url}/rest/api/2/issue/{issue_key}/comment"
             response = self.session.get(url, timeout=30)
@@ -144,9 +155,12 @@ class JiraClient:
                 return []
 
             data = response.json()
-            return data.get("comments", [])
+            comments = data.get("comments", [])
         except Exception:
             return []
+
+        self._comments_cache[issue_key] = comments
+        return comments
 
     def _parse_jira_datetime(self, created_str: str):
         """Parse Jira timestamp like 2026-05-08T17:32:01.123+0800 into datetime"""

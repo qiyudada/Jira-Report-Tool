@@ -23,6 +23,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from src import JiraClient, ReportGenerator, Config
 from src.ai_providers import get_models, get_default_model, get_label, provider_env_var
 from src.env_config import load_env, load_claude_settings, normalize_claude_env_keys
+from src.progress_derive import derive_summaries
 
 
 VALID_STATUSES = ["ALL", "WAIT FAE INFO", "WORKED AROUND", "WORKING",
@@ -319,6 +320,44 @@ def cmd_export(args):
         sys.exit(1)
 
 
+def cmd_derive(args):
+    """Deterministic progress extraction: read data.json, write a candidate
+    summaries.json with no LLM call. The agent reviews the low-confidence
+    issues (no resolution/solution signal) and may refine them before `export`.
+    This is the code-backed floor that keeps the skill flow from collapsing to
+    「仍在排查中」 when a real progress signal exists."""
+    input_path = args.input
+    if not os.path.exists(input_path):
+        print(f"Error: data file not found: {input_path}", file=sys.stderr)
+        sys.exit(1)
+
+    with open(input_path, "r", encoding="utf-8") as f:
+        data = json.load(f)
+
+    summaries, low_conf_keys = derive_summaries(data)
+
+    output_path = args.output
+    if not output_path.endswith(".json"):
+        output_path += ".json"
+    output_dir = os.path.dirname(output_path)
+    if output_dir and not os.path.exists(output_dir):
+        os.makedirs(output_dir)
+
+    with open(output_path, "w", encoding="utf-8") as f:
+        json.dump(summaries, f, ensure_ascii=False, indent=2)
+
+    prefilled = sum(1 for i in data.get("issues", []) if (i.get("prefilled_summary") or "").strip())
+    print(f"Derived summaries: {len(summaries)} issues -> {output_path}")
+    print(f"({prefilled} prefilled skipped)")
+    if low_conf_keys:
+        print("Low-confidence (no resolution/solution signal — review these):")
+        for k in low_conf_keys:
+            print(f"  - {k}")
+    else:
+        print("All issues carry a resolution/solution signal.")
+    print("Next: review/refine summaries.json, then run `cli.py export`.")
+
+
 class _StubJiraClient:
     """Minimal JiraClient stub for `export`. ReportGenerator.export_from_data
     does not call any network methods; it only needs `base_url` for hyperlinks
@@ -351,7 +390,7 @@ def _route_subcommand(argv):
     Top-level --help/-h/-V/--version pass through unchanged so the parent
     parser can list all subcommands instead of leaking one subcommand's help.
     """
-    subcommands = {"run", "prepare", "export"}
+    subcommands = {"run", "prepare", "export", "derive"}
     help_flags = {"-h", "--help", "-V", "--version"}
     if not argv:
         return ["run"]
@@ -427,12 +466,18 @@ Examples:
     p_exp.add_argument("-o", "--output", required=True)
     _add_format_flags(p_exp)
 
+    # --- derive ---
+    p_der = subparsers.add_parser("derive", help="data.json -> deterministic summaries.json (no LLM)")
+    p_der.add_argument("--input", required=True, help="Path to data.json from `prepare`")
+    p_der.add_argument("-o", "--output", required=True, help="Path for summaries.json")
+
     argv = _route_subcommand(sys.argv[1:])
     args = parser.parse_args(argv)
     {
         "run": cmd_run,
         "prepare": cmd_prepare,
         "export": cmd_export,
+        "derive": cmd_derive,
     }[args.subcommand](args)
 
 

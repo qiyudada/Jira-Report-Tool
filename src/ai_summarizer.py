@@ -3,6 +3,14 @@ AI Summarizer - Multi-provider AI integration for issue summarization
 """
 import re
 from src.ai_providers import call_ai, get_label
+from src.progress_derive import (
+    compact_comment_signal,
+    normalize_progress_text,
+    has_resolution_signal,
+    has_solution_signal,
+    comment_signal_score,
+    fallback_summary,
+)
 
 
 class AISummarizer:
@@ -189,53 +197,21 @@ class AISummarizer:
 
     def _compact_comment_signal(self, body: str) -> str:
         """Reduce noisy technical text before sending to model"""
-        if not body:
-            return ""
-
-        text = body
-        text = re.sub(r'(?:[A-Za-z0-9_.-]+[\\/]){2,}[A-Za-z0-9_.-]+', '[路径]', text)
-        text = re.sub(r'(?<![A-Za-z0-9.-])(?:[A-Za-z]:)?(?:[\\/][A-Za-z0-9_. -]+){2,}', '[路径]', text)
-        text = re.sub(r'\b[\w.-]+\.(?:zip|rar|7z|tar|gz|log|dmp|txt)\b\s*(?:\([^)]*\))?', '', text, flags=re.IGNORECASE)
-        text = re.sub(r'\s+', ' ', text).strip()
-
-        text = re.sub(r'\b([\w.-]{2,})\s+替换\[路径\]下同文件试下', r'提供\1文件替换方案', text, flags=re.IGNORECASE)
-        text = re.sub(r'替换\[路径\]下同文件试下', '替换对应目录下同名文件', text)
-        text = text.replace('[路径]下同文件', '对应目录下同名文件')
-        text = text.replace('[路径]', '对应路径')
-        return text.strip()
+        return compact_comment_signal(body)
 
     def _comment_signal_score(self, comment: dict) -> int:
         """Rank comments by progress value"""
-        body = comment.get('body', '')
-        role = comment.get('author_role', '')
-        score = 0
-        if comment.get('in_period', True):
-            score += 2
-        if role in ("当前用户", "我方"):
-            score += 2
-        if re.search(r'验证可以|验证通过|测试通过|恢复正常|解决|关闭|closed|验证完成|没有问题', body, re.IGNORECASE):
-            score += 6
-        if re.search(r'提供|替换|修改|配置|方案|补丁|patch|disable|disabled|烧写|排查|确认|说明|建议', body, re.IGNORECASE):
-            score += 4
-        if re.search(r'\b(?:Log|dbg|dump|trace)\b|日志|附件', body, re.IGNORECASE):
-            score -= 2
-        return score
+        return comment_signal_score(comment)
 
     def _normalize_progress_text(self, text: str) -> str:
         """Make fallback summaries read like progress"""
-        text = self._compact_comment_signal(text)
-        text = re.sub(r'^提供([\w.-]{2,})文件替换方案$', r'提供\1文件替换方案', text)
-        text = text.replace('验证可以', '验证通过')
-        text = text.replace('验证完成，没有问题', '验证无问题')
-        text = text.replace('此单关闭', '问题关闭')
-        text = re.sub(r'\s+', ' ', text).strip(' ，,。')
-        return text
+        return normalize_progress_text(text)
 
     def _has_resolution_signal(self, text: str) -> bool:
-        return bool(re.search(r'验证可以|验证通过|测试通过|恢复正常|问题关闭|此单关闭|解决|closed|验证完成|没有问题', text, re.IGNORECASE))
+        return has_resolution_signal(text)
 
     def _has_solution_signal(self, text: str) -> bool:
-        return bool(re.search(r'提供|替换|修改|配置|方案|补丁|patch|disable|disabled|烧写|排查|确认|说明|建议|NV文件', text, re.IGNORECASE))
+        return has_solution_signal(text)
 
     def _is_low_quality_summary(self, summary: str) -> bool:
         """Detect model outputs that are just a token/path/keyword"""
@@ -263,39 +239,4 @@ class AISummarizer:
 
     def _fallback_summary(self, comments: list, reason: str = "") -> str:
         """Deterministic fallback summary"""
-        if not comments:
-            return "无评论"
-
-        sorted_comments = sorted(comments, key=lambda x: x['date'])
-        outcome = None
-        solution = None
-        latest_signal = None
-
-        for comment in sorted_comments:
-            body = self._normalize_progress_text(comment.get('body', ''))
-            if not body:
-                continue
-            if self._has_solution_signal(body):
-                solution = body
-                latest_signal = body
-            if self._has_resolution_signal(body):
-                outcome = body
-                latest_signal = body
-
-        if outcome:
-            if len(outcome) <= 8 and solution:
-                return f"{solution}，{outcome}。"
-            return outcome[:120] + ("..." if len(outcome) > 120 else "")
-
-        if solution:
-            return solution[:120] + ("..." if len(solution) > 120 else "")
-
-        if latest_signal:
-            return latest_signal[:120] + ("..." if len(latest_signal) > 120 else "")
-
-        latest = sorted(comments, key=lambda x: x['date'], reverse=True)[0]
-        body = self._normalize_progress_text(latest.get('body', ''))
-        if len(body) > 100:
-            body = body[:100] + "..."
-
-        return body
+        return fallback_summary(comments, reason)
